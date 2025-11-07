@@ -31,7 +31,35 @@ def get_trade_history():
 
 @app.route('/api/ai-analysis-history', methods=['GET'])
 def get_ai_analysis():
-    return jsonify(data_manager.get_ai_analysis_history())
+    # 获取分页参数
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 10, type=int)
+    
+    # 获取所有数据
+    all_data = data_manager.get_ai_analysis_history()
+    
+    # 计算分页
+    total_count = len(all_data)
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    
+    # 按时间倒序排列（最新的在前面）
+    sorted_data = sorted(all_data, key=lambda x: x.get('timestamp', ''), reverse=True)
+    
+    # 获取当前页数据
+    page_data = sorted_data[start_idx:end_idx]
+    
+    return jsonify({
+        'data': page_data,
+        'pagination': {
+            'page': page,
+            'page_size': page_size,
+            'total_count': total_count,
+            'total_pages': (total_count + page_size - 1) // page_size,
+            'has_next': end_idx < total_count,
+            'has_prev': page > 1
+        }
+    })
 
 @app.route('/api/performance', methods=['GET'])
 def get_performance():

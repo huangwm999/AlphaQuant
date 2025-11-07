@@ -19,12 +19,14 @@
     <div id="root"></div>
     <script type="text/babel">
         const { useState, useEffect } = React;
-        const { Layout, Card, Row, Col, Table, Button, message, Typography, Space, Tabs, Statistic } = antd;
+        const { Layout, Card, Row, Col, Table, Button, message, Typography, Space, Tabs, Statistic, Pagination } = antd;
         const { Text } = Typography;
 
         function App() {
             const [data, setData] = useState({ system: {}, trades: [], performance: {}, analysis: [] });
             const [technicalData, setTechnicalData] = useState(null);
+            const [analysisPage, setAnalysisPage] = useState(1);
+            const [analysisData, setAnalysisData] = useState({ data: [], pagination: {} });
             
             const handleLogout = () => {
                 localStorage.removeItem('isLoggedIn');
@@ -32,14 +34,29 @@
                 window.location.href = '/';
             };
 
+            // 加载AI分析数据（分页）
+            const loadAnalysisData = async (page = 1, pageSize = 10) => {
+                try {
+                    const response = await fetch(`/api/ai-analysis-history?page=${page}&page_size=${pageSize}&_t=${Date.now()}`);
+                    const result = await response.json();
+                    setAnalysisData(result);
+                } catch (error) {
+                    console.error('AI分析数据加载失败:', error);
+                    message.error('AI分析数据加载失败');
+                }
+            };
+
             const loadData = async () => {
                 try {
                     const t = Date.now();
-                    const [system, trades, performance, analysis, technical] = await Promise.all([
-                        '/api/system-status', '/api/trade-history', '/api/performance', '/api/ai-analysis-history', '/api/technical-chart'
+                    const [system, trades, performance, technical] = await Promise.all([
+                        '/api/system-status', '/api/trade-history', '/api/performance', '/api/technical-chart'
                     ].map(url => fetch(`${url}?_t=${t}`).then(r => r.json())));
-                    setData({ system: system || {}, trades: trades || [], performance: performance || {}, analysis: analysis || [] });
+                    setData({ system: system || {}, trades: trades || [], performance: performance || {} });
                     setTechnicalData(technical);
+                    
+                    // 同时加载AI分析数据
+                    await loadAnalysisData(analysisPage);
                 } catch (error) {
                     console.error('数据加载失败:', error);
                     message.error('数据加载失败');
@@ -58,11 +75,12 @@
             window.updateTechnicalChart = updateTechnicalChart;
 
             useEffect(() => { loadData(); const timer = setInterval(loadData, 5000); return () => clearInterval(timer); }, []);
+            useEffect(() => { loadAnalysisData(); }, []); // 初始加载AI分析数据
             useEffect(() => data.trades?.length && window.initPriceChart && setTimeout(() => window.initPriceChart(data.trades), 100), [data.trades]);
             useEffect(() => data.performance?.daily_pnl && window.initDailyPnlChart && setTimeout(() => window.initDailyPnlChart(data.performance.daily_pnl), 100), [data.performance]);
             useEffect(() => technicalData && setTimeout(() => updateTechnicalChart(), 100), [technicalData]);
 
-            const { system, trades, analysis, performance } = data;
+            const { system, trades, performance } = data;
             const { btc_info: btc = {}, account_info: account = {}, ai_signal: aiSignal = {}, position = {} } = system;
             const tableProps = { rowKey: 'key', size: 'small', pagination: false };
             const statusCards = [
@@ -315,15 +333,42 @@
                                         {
                                             key: '2',
                                             label: '历史记录',
-                                            children: h(Table, {
-                                                dataSource: analysis.slice(-10).reverse().map((item, i) => ({ ...item, key: item.id || i })),
-                                                expandable: {
-                                                    expandedRowRender: record => h('div', { style: { padding: '16px', background: '#fafafa', borderRadius: '4px', fontSize: '13px', lineHeight: '1.5' } }, record.reason || '暂无详细信息'),
-                                                    rowExpandable: record => !!(record.reason)
-                                                },
-                                                columns: analysisColumns, ...tableProps,
-                                                locale: { emptyText: '暂无分析记录' }, scroll: { y: 250 }
-                                            })
+                                            children: h('div', { style: { height: '100%' } },
+                                                h(Table, {
+                                                    dataSource: analysisData.data?.map((item, i) => ({ ...item, key: item.id || i })) || [],
+                                                    expandable: {
+                                                        expandedRowRender: record => h('div', { style: { padding: '16px', background: '#fafafa', borderRadius: '4px', fontSize: '13px', lineHeight: '1.5' } }, record.reason || '暂无详细信息'),
+                                                        rowExpandable: record => !!(record.reason)
+                                                    },
+                                                    columns: analysisColumns, 
+                                                    rowKey: 'key', 
+                                                    size: 'small', 
+                                                    pagination: false,
+                                                    locale: { emptyText: '暂无分析记录' }, 
+                                                    scroll: { y: 200 }
+                                                }),
+                                                // 分页组件
+                                                analysisData.pagination?.total_count > 0 && h('div', { style: { textAlign: 'center', marginTop: '16px', paddingTop: '8px', borderTop: '1px solid #f0f0f0' } },
+                                                    h(Pagination, {
+                                                        current: analysisData.pagination.page,
+                                                        pageSize: analysisData.pagination.page_size,
+                                                        total: analysisData.pagination.total_count,
+                                                        showSizeChanger: true,
+                                                        showQuickJumper: true,
+                                                        showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+                                                        pageSizeOptions: ['5', '10', '20', '50'],
+                                                        size: 'small',
+                                                        onChange: (page, pageSize) => {
+                                                            setAnalysisPage(page);
+                                                            loadAnalysisData(page, pageSize);
+                                                        },
+                                                        onShowSizeChange: (current, size) => {
+                                                            setAnalysisPage(1);
+                                                            loadAnalysisData(1, size);
+                                                        }
+                                                    })
+                                                )
+                                            )
                                         }
                                     ]
                                 })

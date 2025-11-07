@@ -141,9 +141,9 @@ class DataManager:
         # 添加分析记录
         analysis_history.append(analysis_record)
         
-        # 只保留最近50条记录
-        if len(analysis_history) > 50:
-            analysis_history = analysis_history[-50:]
+        # 保留更多记录，增加到500条
+        if len(analysis_history) > 500:
+            analysis_history = analysis_history[-500:]
         
         self._save_json(self.ai_analysis_file, analysis_history)
     

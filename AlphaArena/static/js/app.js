@@ -77,9 +77,6 @@ window.initTechnicalChart = (data, selectedIndicators = []) => {
         return;
     }
     
-    console.log('初始化技术图表，数据点数量:', data.labels.length);
-    console.log('选中的指标:', selectedIndicators);
-    
     if (window.technicalChart?.destroy) try { window.technicalChart.destroy(); } catch (e) {}
     
     const datasets = [];
