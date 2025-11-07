@@ -57,21 +57,26 @@
 
 ###  传统部署
 
-#### 创建环境​​windows
+#### 创建环境​​linux
 ```bash
-python -m venv myenv
+git clone https://github.com/huangwm999/AlphaQuant.git
+cd AlphaQuant/
+
+sudo apt update && sudo apt install python3-venv -y
+python3 -m venv myenv
 source myenv/bin/activate  # Linux/Mac
-pip install -r requirements.txt
+pip install -r AlphaArena/requirements.txt
 ```
 
 #### 3. 启动服务
 ```bash
+source env_trading.sh   # 加载API密钥等环境变量
 screen_start.sh
 ```
 
 
 #### 4. 访问Web界面
-http://localhost:8004
+http://localhost:8003
 
 ## 🖥️ Web界面功能
 

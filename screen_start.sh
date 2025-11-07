@@ -7,19 +7,6 @@
 SESSION_NAME="AlphaArena"
 BASE_DIR="./"
 
-# ========================================
-# 请在此处填写您的 API 密钥
-# ========================================
-
-DEEPSEEK_API_KEY="sk-"
-OKX_API_KEY="735e2d0d-"
-OKX_SECRET="0834DF3"
-OKX_PASSWORD="Qua"
-
-# ========================================
-# 设置环境变量
-# ========================================
-
 export DEEPSEEK_API_KEY
 export OKX_API_KEY
 export OKX_SECRET
