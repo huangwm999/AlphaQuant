@@ -123,7 +123,6 @@ TRADE_CONFIG = {
 ```
 
 ## 🛠️ 技术栈
-
 - **后端**: Python + Flask
 - **前端**: HTML5 + Tailwind CSS + Chart.js
 - **交易**: CCXT + OKX API
@@ -132,7 +131,6 @@ TRADE_CONFIG = {
 - **容器化**: Docker + Docker Compose
 
 ## 📄 许可证
-
 本项目仅供大数据学习和研究使用，请遵守相关法律法规。
 参考 https://github.com/oficcejo/alpha-arena-okx 接口及指标项，感谢原作者的无私分享。
 页面设计及AI决策重新编写。
