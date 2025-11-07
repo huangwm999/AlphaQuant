@@ -50,9 +50,7 @@
    - 创建API Key
    - 模型：deepseek-reasoner
 
-**交易所：okx手机app是大陆唯一能用的交易所app，无需翻墙**
-
-3. **OKX API**: https://www.okx.com/zh-hans
+2. **OKX API**: https://www.okx.com/zh-hans
    - API管理 → 创建API，保留KEY,SECRET,PASS
    - 权限：需要"交易"权限，永续合约
    - **重要**：妥善保管密钥，不要泄露
@@ -62,6 +60,7 @@
 #### 创建环境​​windows
 ```bash
 python -m venv myenv
+source myenv/bin/activate  # Linux/Mac
 pip install -r requirements.txt
 ```
 
@@ -135,7 +134,7 @@ TRADE_CONFIG = {
 ## 📄 许可证
 
 本项目仅供大数据学习和研究使用，请遵守相关法律法规。
-参考https://github.com/oficcejo/alpha-arena-okx接口及指标项，感谢原作者的无私分享。
+参考 https://github.com/oficcejo/alpha-arena-okx 接口及指标项，感谢原作者的无私分享。
 页面设计及AI决策重新编写。
 ---
 
