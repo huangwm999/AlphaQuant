@@ -14,7 +14,7 @@ export OKX_PASSWORD
 
 # 定义窗口名称和对应的命令
 declare -A WINDOWS
-WINDOWS["web"]="cd $BASE_DIR && source myenv/bin/activate && python AlphaArena/web_app2.py"
+WINDOWS["web"]="cd $BASE_DIR && source env_trading.sh && source myenv/bin/activate && python AlphaArena/web_app2.py"
 WINDOWS["trading"]="cd $BASE_DIR && source env_trading.sh && source myenv/bin/activate && python AlphaArena/deepseekok3.py && echo 'End'"
 WINDOWS["monitor"]="cd $BASE_DIR && source myenv/bin/activate && echo '🔍 监控窗口 - 按 Ctrl+C 退出' && python -c 'import time; [print(f\"监控中... {time.strftime(\"%H:%M:%S\")}\", end=\"\\r\") or time.sleep(1) for _ in range(999999)]'"
 WINDOWS["logs"]="cd $BASE_DIR && tail -f AlphaArena/*.log 2>/dev/null || echo '暂无日志文件'"
