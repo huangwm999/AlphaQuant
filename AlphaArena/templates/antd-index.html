@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OKX BTC交易机器人 - 智能交易系统</title>
+    <link rel="stylesheet" href="/static/css/antd.css" />
+    <link rel="stylesheet" href="/static/css/custom.css" />
+    <script crossorigin src="/static/js/react.production.min.js"></script>
+    <script crossorigin src="/static/js/react-dom.production.min.js"></script>
+    <script src="/static/js/babel.min.js"></script>
+    <script src="/static/js/moment.min.js"></script>
+    <script src="/static/js/antd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.1/dist/chartjs-adapter-moment.min.js"></script>
+    <script type="text/babel" src="/static/js/app.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { Layout, Card, Row, Col, Table, Button, message, Typography, Space, Tabs, Statistic } = antd;
+        const { Text } = Typography;
+
+        function App() {
+            const [data, setData] = useState({ system: {}, trades: [], performance: {}, analysis: [] });
+            const [technicalData, setTechnicalData] = useState(null);
+            
+            const handleLogout = () => {
+                localStorage.removeItem('isLoggedIn');
+                localStorage.removeItem('username');
+                window.location.href = '/';
+            };
+
+            const loadData = async () => {
+                try {
+                    const t = Date.now();
+                    const [system, trades, performance, analysis, technical] = await Promise.all([
+                        '/api/system-status', '/api/trade-history', '/api/performance', '/api/ai-analysis-history', '/api/technical-chart'
+                    ].map(url => fetch(`${url}?_t=${t}`).then(r => r.json())));
+                    setData({ system: system || {}, trades: trades || [], performance: performance || {}, analysis: analysis || [] });
+                    setTechnicalData(technical);
+                } catch (error) {
+                    console.error('数据加载失败:', error);
+                    message.error('数据加载失败');
+                }
+            };
+
+            const updateTechnicalChart = () => {
+                if (!technicalData) return;
+                const checkboxes = document.querySelectorAll('input[data-indicator]');
+                const selected = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.dataset.indicator);
+                window.initTechnicalChart && window.initTechnicalChart(technicalData, selected);
+            };
+
+
+
+            window.updateTechnicalChart = updateTechnicalChart;
+
+            useEffect(() => { loadData(); const timer = setInterval(loadData, 5000); return () => clearInterval(timer); }, []);
+            useEffect(() => data.trades?.length && window.initPriceChart && setTimeout(() => window.initPriceChart(data.trades), 100), [data.trades]);
+            useEffect(() => data.performance?.daily_pnl && window.initDailyPnlChart && setTimeout(() => window.initDailyPnlChart(data.performance.daily_pnl), 100), [data.performance]);
+            useEffect(() => technicalData && setTimeout(() => updateTechnicalChart(), 100), [technicalData]);
+
+            const { system, trades, analysis, performance } = data;
+            const { btc_info: btc = {}, account_info: account = {}, ai_signal: aiSignal = {}, position = {} } = system;
+            const tableProps = { rowKey: 'key', size: 'small', pagination: false };
+            const statusCards = [
+                ['₿', 'BTC价格', btc.price ? `$${btc.price.toLocaleString()}` : '--', btc.change ? `${btc.change > 0 ? '+' : ''}${btc.change.toFixed(2)}%` : '--', '#f7931a'],
+                ['💰', '账户余额', account.balance ? `${account.balance.toFixed(2)} USDT` : '--', '可用资金', '#52c41a'],
+                ['🧠', 'AI决策', aiSignal.signal || '--', `信心: ${aiSignal.confidence || '--'}`, '#722ed1'],
+                ['📈', '当前持仓', position.side ? `${position.side === 'LONG' || position.side === 'long' ? '多' : '空'}仓 ${position.size || 0} 张` : '--', position.unrealized_pnl ? `盈亏: ${position.unrealized_pnl.toFixed(4)} USDT` : '--', position.unrealized_pnl != null ? (position.unrealized_pnl >= 0 ? '#f5222d' : '#52c41a') : '#1890ff']
+            ];
+            const perfStats = [
+                [performance.total_trades || 0, '总交易次数', '📊', '#1890ff'],
+                [`${performance.total_trades > 0 ? ((performance.winning_trades || 0) / performance.total_trades * 100).toFixed(1) : 0}%`, '胜率', '✅', '#52c41a'],
+                [(performance.total_pnl || 0).toFixed(2), '总盈亏', '💰', performance.total_pnl >= 0 ? '#f5222d' : '#52c41a'],
+                [performance.total_trades > 0 ? (performance.total_pnl / performance.total_trades).toFixed(3) : '0.000', '平均盈亏', '📈', performance.total_pnl >= 0 ? '#f5222d' : '#52c41a']
+            ];
+
+            const createStatCard = (icon, title, value, subtitle, color) => 
+                h(Card, { className: 'balance-card' },
+                    h('div', { style: { display: 'flex', alignItems: 'center', marginBottom: 8 } },
+                        h('span', { style: { fontSize: '24px', marginRight: 8, color } }, icon),
+                        h(Text, { type: 'secondary' }, title)
+                    ),
+                    h('div', { className: 'big-number' }, value),
+                    h('div', { style: { fontSize: '12px', color: subtitle.includes('盈亏:') ? color : '#666' } }, subtitle)
+                );
+
+            return h(Layout, { style: { minHeight: '100vh', background: '#f5f5f5' } },
+                // 顶部标题栏
+                h(Layout.Header, { style: { background: '#fff', padding: '0 50px', boxShadow: '0 2px 8px #0001' } },
+                    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '64px' } },
+                        h(Space, null, h('span', null, '🤖'), h('span', { style: { fontSize: '18px', fontWeight: 'bold', color: '#1890ff' } }, 'OKX BTC交易机器人')),
+                        h(Space, null,
+                            h('span', { className: 'status-online' }, '运行中'),
+                            h('span', null, `最后更新: ${moment().format('YYYY/M/D HH:mm:ss')}`),
+                            h(Button, { type: 'primary', danger: true, onClick: handleLogout }, '登出')
+                        )
+                    )
+                ),
+
+                h(Layout.Content, { style: { maxWidth: 1400, margin: '24px auto', padding: '0 24px', width: '100%' } },
+                    // 指标卡片行
+                    h(Row, { gutter: [16, 16], style: { marginBottom: 16 } },
+                        ...statusCards.map(([icon, title, value, subtitle, color]) => 
+                            h(Col, { xs: 24, sm: 12, lg: 6 }, createStatCard(icon, title, value, subtitle, color))
+                        )
+                    ),
+
+                    // 技术指标图表行
+                    h(Row, { gutter: [16, 16], style: { marginBottom: 16 } },
+                        // 技术指标图表（占用全宽）
+                        h(Col, { xs: 24 },
+                            h(Card, { 
+                                title: h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                                    h('span', null, '技术指标分析'),
+                                    // 市场情绪信息
+                                    technicalData?.sentiment ? 
+                                        h('div', { style: { fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' } },
+                                            h('span', { style: { color: '#666' } }, '市场情绪:'),
+                                            h('span', { 
+                                                style: { 
+                                                    color: technicalData.sentiment.trend === 'bullish' ? '#52c41a' : 
+                                                           technicalData.sentiment.trend === 'bearish' ? '#f5222d' : '#faad14',
+                                                    fontWeight: 'bold'
+                                                }
+                                            }, 
+                                                `乐观${(technicalData.sentiment.positive_ratio * 100).toFixed(1)}% 悲观${(technicalData.sentiment.negative_ratio * 100).toFixed(1)}%`
+                                            ),
+                                            h('span', { 
+                                                style: { 
+                                                    color: technicalData.sentiment.net_sentiment >= 0 ? '#52c41a' : '#f5222d',
+                                                    fontSize: '11px'
+                                                }
+                                            }, 
+                                                `净值${technicalData.sentiment.net_sentiment >= 0 ? '+' : ''}${technicalData.sentiment.net_sentiment.toFixed(3)}`
+                                            )
+                                        ) : 
+                                        h('span', { style: { fontSize: '12px', color: '#999' } }, '情绪数据获取中...')
+                                ),
+                                style: { height: 450 } },
+                                // 指标选择器
+                                h('div', { className: 'indicator-controls' },
+                                    h('label', null,
+                                        h('input', { 
+                                            type: 'checkbox', 
+                                            checked: true,
+                                            onChange: (e) => window.updateTechnicalChart(),
+                                            'data-indicator': 'price'
+                                        }),
+                                        '价格曲线'
+                                    ),
+                                    h('label', null,
+                                        h('input', { 
+                                            type: 'checkbox',
+                                            onChange: (e) => window.updateTechnicalChart(),
+                                            'data-indicator': 'sma5'
+                                        }),
+                                        'SMA5'
+                                    ),
+                                    h('label', null,
+                                        h('input', { 
+                                            type: 'checkbox',
+                                            onChange: (e) => window.updateTechnicalChart(),
+                                            'data-indicator': 'sma20'
+                                        }),
+                                        'SMA20'
+                                    ),
+                                    h('label', null,
+                                        h('input', { 
+                                            type: 'checkbox',
+                                            onChange: (e) => window.updateTechnicalChart(),
+                                            'data-indicator': 'sma50'
+                                        }),
+                                        'SMA50'
+                                    ),
+                                    h('label', null,
+                                        h('input', { 
+                                            type: 'checkbox',
+                                            onChange: (e) => window.updateTechnicalChart(),
+                                            'data-indicator': 'bollinger'
+                                        }),
+                                        '布林带通道'
+                                    ),
+                                    h('label', null,
+                                        h('input', { 
+                                            type: 'checkbox',
+                                            onChange: (e) => window.updateTechnicalChart(),
+                                            'data-indicator': 'macd'
+                                        }),
+                                        'MACD线'
+                                    ),
+                                    h('label', null,
+                                        h('input', { 
+                                            type: 'checkbox',
+                                            onChange: (e) => window.updateTechnicalChart(),
+                                            'data-indicator': 'macd_signal'
+                                        }),
+                                        'MACD信号线'
+                                    ),
+                                    h('label', null,
+                                        h('input', { 
+                                            type: 'checkbox',
+                                            onChange: (e) => window.updateTechnicalChart(),
+                                            'data-indicator': 'rsi'
+                                        }),
+                                        'RSI'
+                                    ),
+                                    h('label', null,
+                                        h('input', { 
+                                            type: 'checkbox',
+                                            onChange: (e) => window.updateTechnicalChart(),
+                                            'data-indicator': 'scores'
+                                        }),
+                                        'Score评分'
+                                    ),
+                                    h('label', null,
+                                        h('input', { 
+                                            type: 'checkbox',
+                                            onChange: (e) => window.updateTechnicalChart(),
+                                            'data-indicator': 'decisions'
+                                        }),
+                                        '交易决策'
+                                    )
+                                ),
+                                // 图表区域
+                                h('div', { style: { height: '280px', padding: '10px' } },
+                                    h('canvas', { id: 'technicalChart' })
+                                )
+                            )
+                        )
+                    ),
+
+                    // 图表和绩效行
+                    h(Row, { gutter: [16, 16], style: { marginBottom: 16 } },
+                        h(Col, { xs: 24, lg: 16 },
+                            h(Card, { title: '价格走势 & 交易信号', style: { height: 400 } },
+                                h('div', { style: { height: '320px', padding: '10px' } },
+                                    h('canvas', { id: 'priceChart' })
+                                )
+                            )
+                        ),
+                        h(Col, { xs: 24, lg: 8 },
+                            h(Card, { title: '交易绩效', style: { height: 400 } },
+                                // 统计指标行
+                                h(Row, { gutter: [8, 8], style: { marginBottom: 16 } },
+                                    ...perfStats.map((v, i) => 
+                                        h(Col, { xs: 12, key: i },
+                                            h(Card, { bordered: true, size: 'small' },
+                                                h(Statistic, { 
+                                                    title: v[1], 
+                                                    value: v[0], 
+                                                    prefix: v[2], 
+                                                    suffix: v[1].includes('盈亏') ? 'USDT' : '', 
+                                                    valueStyle: { color: v[3], fontSize: '18px' } 
+                                                })
+                                            )
+                                        )
+                                    )
+                                ),
+                                // 每日盈亏图表
+                                h('div', { style: { padding: 12, background: '#fafafa', borderRadius: 8, height: '120px' } },
+                                    h(Text, { strong: true, style: { display: 'block', marginBottom: 8 } }, '每日盈亏'),
+                                    h('div', { style: { height: '70px' } },
+                                        h('canvas', { id: 'dailyPnlChart' })
+                                    )
+                                )
+                            )
+                        )
+                    ),
+
+                    h(Row, { gutter: [16, 16] },
+                        h(Col, { xs: 24, lg: 12 },
+                            h(Card, { title: '最近交易记录', style: { height: 450 } },
+                                h(Table, {
+                                    dataSource: trades.slice(-10).reverse().map((item, i) => ({ ...item, key: item.id || i })),
+                                    columns: tradeColumns, ...tableProps,
+                                    locale: { emptyText: '暂无交易记录' }, scroll: { y: 300 }
+                                })
+                            )
+                        ),
+                        h(Col, { xs: 24, lg: 12 },
+                            h(Card, { title: 'AI分析详情', style: { height: 450 } },
+                                h(Tabs, { 
+                                    defaultActiveKey: '1', 
+                                    size: 'small',
+                                    items: [
+                                        {
+                                            key: '1',
+                                            label: '当前分析',
+                                            children: h(Space, { direction: 'vertical', style: { width: '100%' }, size: 'middle' },
+                                                h('div', null,
+                                                    h(Text, { strong: true }, '决策理由'),
+                                                    h('div', { style: { marginTop: 8, padding: 16, background: '#f5f5f5', borderRadius: 8, fontSize: '14px', lineHeight: '1.6', maxHeight: '120px', overflowY: 'auto' } },
+                                                        aiSignal.reason || '系统正在分析市场数据，请稍候...'
+                                                    )
+                                                ),
+                                                h(Row, { gutter: 16 },
+                                                    ...['止损价格', '止盈价格'].map((label, i) => 
+                                                        h(Col, { span: 12 },
+                                                            h(Text, { strong: true }, label),
+                                                            h('div', { style: { fontSize: '20px', fontWeight: 'bold', color: i ? '#52c41a' : '#f5222d', marginTop: 8 } },
+                                                                (i ? aiSignal.take_profit : aiSignal.stop_loss) ? `$${(i ? aiSignal.take_profit : aiSignal.stop_loss).toLocaleString()}` : '--'
+                                                            )
+                                                        )
+                                                    )
+                                                ),
+                                                h('div', null,
+                                                    h(Text, { strong: true }, '技术指标')
+                                                )
+                                            )
+                                        },
+                                        {
+                                            key: '2',
+                                            label: '历史记录',
+                                            children: h(Table, {
+                                                dataSource: analysis.slice(-10).reverse().map((item, i) => ({ ...item, key: item.id || i })),
+                                                expandable: {
+                                                    expandedRowRender: record => h('div', { style: { padding: '16px', background: '#fafafa', borderRadius: '4px', fontSize: '13px', lineHeight: '1.5' } }, record.reason || '暂无详细信息'),
+                                                    rowExpandable: record => !!(record.reason)
+                                                },
+                                                columns: analysisColumns, ...tableProps,
+                                                locale: { emptyText: '暂无分析记录' }, scroll: { y: 250 }
+                                            })
+                                        }
+                                    ]
+                                })
+                            )
+                        )
+                    )
+                )
+            );
+        }
+
+        ReactDOM.render(h(App), document.getElementById('root'));
+    </script>
+</body>
+</html>

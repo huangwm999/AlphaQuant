@@ -1,0 +1,158 @@
+/* OKX BTC交易机器人 - 自定义样式 */
+
+body {
+    margin: 0;
+    padding: 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.okx-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: white;
+    font-size: 20px;
+    font-weight: bold;
+}
+
+.status-online {
+    background: #52c41a;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+}
+
+.main-content {
+    padding: 16px;
+    background: #f0f2f5;
+    min-height: calc(100vh - 64px);
+}
+
+.big-number {
+    font-size: 32px;
+    font-weight: bold;
+    color: #000;
+}
+
+.small-change {
+    font-size: 14px;
+    color: #52c41a;
+}
+
+.balance-card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* 统一大圆角卡片样式 */
+.ant-card {
+    border-radius: 16px !important;
+}
+
+.ant-card-body {
+    border-radius: 16px !important;
+}
+
+.ai-signal-badge {
+    background: #52c41a;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 16px;
+}
+
+.chart-container {
+    height: 300px;
+    width: 100%;
+    position: relative;
+}
+
+.performance-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.performance-item {
+    text-align: center;
+    padding: 16px;
+    background: rgba(255,255,255,0.9);
+    border-radius: 8px;
+}
+
+.performance-chart {
+    height: 120px;
+    background: #f5f5f5;
+    border-radius: 8px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    margin-top: 16px;
+}
+
+/* 技术指标复选框样式 */
+.indicator-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: #fafafa;
+    border-radius: 8px;
+}
+
+.indicator-controls label {
+    display: flex;
+    align-items: center;
+    font-size: 13px;
+    color: #595959;
+    cursor: pointer;
+    user-select: none;
+}
+
+.indicator-controls label:hover {
+    color: #1890ff;
+}
+
+.indicator-controls input[type="checkbox"] {
+    margin-right: 6px;
+    accent-color: #1890ff;
+}
+
+/* 市场情绪显示样式 */
+.sentiment-display {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    padding: 4px 8px;
+    background: rgba(0, 0, 0, 0.02);
+    border-radius: 4px;
+    border: 1px solid #e8e8e8;
+}
+
+.sentiment-bullish {
+    color: #52c41a;
+    font-weight: bold;
+}
+
+.sentiment-bearish {
+    color: #f5222d;
+    font-weight: bold;
+}
+
+.sentiment-neutral {
+    color: #faad14;
+    font-weight: bold;
+}
+
+.technical-chart-container {
+    position: relative;
+    height: 350px;
+}
