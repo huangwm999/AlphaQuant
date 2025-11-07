@@ -139,18 +139,16 @@ TRADE_CONFIG = {
 }
 ```
 
-## 🛠️ 技术栈
+## 🛠️ 极致简化技术栈
 - **后端**: Python + Flask
-- **前端**: HTML5 + Tailwind CSS + Chart.js
+- **前端**: Antd
 - **交易**: CCXT + OKX API
 - **AI**: DeepSeek API
 - **数据**: JSON文件存储
-- **容器化**: Docker + Docker Compose
 
 ## 📄 许可证
 本项目仅供大数据学习和研究使用，请遵守相关法律法规。
-参考 https://github.com/oficcejo/alpha-arena-okx 接口及指标项，感谢原作者的无私分享。
-页面设计及AI决策重新编写。
+感谢 https://github.com/oficcejo/alpha-arena-okx 提供的指标分析示例。
 ---
 
 **提示**: 交易有风险，投资需谨慎！
@@ -159,3 +157,6 @@ TRADE_CONFIG = {
 
 - Document/alphaarena_trading_bot.md - 交易机器人详细说明
 - Document/alphaarena_trading_strategy.md - 交易策略详解
+
+## 联系方式
+QQ: 425631585
