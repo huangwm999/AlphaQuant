@@ -81,6 +81,7 @@ pip install -r AlphaArena/requirements.txt
 ```
 
 #### 3. 启动服务
+# 修改 env_trading.sh.template为 env_trading.sh 填入你的API密钥等环境变量
 ```bash
 source env_trading.sh   # 加载API密钥等环境变量
 screen_start.sh

@@ -10,9 +10,8 @@ from deepseekok3 import get_btc_ohlcv_for_web, calculate_integrated_trading_scor
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 CORS(app)
-app.secret_key = 'alphaarena_2025'
+app.secret_key = ''
 
-ALLOWED_HOSTS = ['quant.teamsmart.top', '172.16.0.252', 'localhost', '127.0.0.1']
 USERNAME = 'quant'
 PASSWORD = 'quant@2025'
 
