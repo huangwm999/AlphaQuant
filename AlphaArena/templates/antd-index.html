@@ -273,9 +273,11 @@
                                         '交易决策'
                                     )
                                 ),
-                                // 图表区域
-                                h('div', { style: { height: '280px', padding: '10px' } },
-                                    h('canvas', { id: 'technicalChart' })
+                                // 图表区域（支持横向滚动）
+                                h('div', { id: 'technicalChart-scroll', style: { height: '280px', padding: '10px', overflowX: 'auto' } },
+                                    h('div', { id: 'technicalChart-inner', style: { minWidth: '100%' } },
+                                        h('canvas', { id: 'technicalChart' })
+                                    )
                                 )
                             )
                         )
@@ -329,18 +331,23 @@
                                         h('input', { type: 'checkbox', defaultChecked: true, onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'decisions' }), '交易决策'
                                     )
                                 ),
-                                // 图表区域（与上方一致）
-                                h('div', { style: { height: '280px', padding: '10px' } },
-                                    h('canvas', { id: 'backtestTechnicalChart' })
+                                // 图表区域（与上方一致，支持横向滚动）
+                                h('div', { id: 'backtestTechnicalChart-scroll', style: { height: '280px', padding: '10px', overflowX: 'auto' } },
+                                    h('div', { id: 'backtestTechnicalChart-inner', style: { minWidth: '100%' } },
+                                        h('canvas', { id: 'backtestTechnicalChart' })
+                                    )
                                 ),
-                                backtest.data ? h('div', { style: { padding: '8px 12px', background: '#fafafa', borderRadius: 8, marginTop: 8 } },
-                                    h(Space, { size: 'large' },
+                                backtest.data ? h('div', { style: { padding: '8px 12px', background: '#fafafa', borderRadius: 8, marginTop: 8, fontSize: '12px', lineHeight: '20px' } },
+                                    h(Space, { size: 'middle', wrap: true },
                                         h('span', null, `数据点: ${backtest.data.summary.data_points}`),
                                         h('span', null, `信号数: ${backtest.data.summary.total_signals}`),
                                         h('span', null, `已平仓: ${backtest.data.summary.closed_trades}`),
-                                        h('span', { style: { color: backtest.data.summary.total_pnl >= 0 ? '#f5222d' : '#52c41a', fontWeight: 'bold' } }, `总收益: ${backtest.data.summary.total_pnl} USDT`),
+                                        h('span', { style: { color: backtest.data.summary.net_pnl_total >= 0 ? '#f5222d' : '#52c41a', fontWeight: 'bold' } }, `净收益: ${backtest.data.summary.net_pnl_total} USDT`),
+                                        h('span', { style: { color: backtest.data.summary.gross_pnl_total >= 0 ? '#f5222d' : '#52c41a' } }, `毛收益: ${backtest.data.summary.gross_pnl_total} USDT`),
+                                        h('span', { style: { color: '#fa8c16' } }, `手续费: ${backtest.data.summary.total_fees} USDT`),
                                         h('span', null, `胜率: ${backtest.data.summary.win_rate}%`),
-                                        h('span', null, `均每笔: ${backtest.data.summary.avg_pnl_per_trade} USDT`)
+                                        h('span', null, `均(毛): ${backtest.data.summary.avg_pnl_gross} USDT`),
+                                        h('span', null, `均(净): ${backtest.data.summary.avg_pnl_net} USDT`)
                                     )
                                 ) : null
                             )

@@ -77,6 +77,17 @@ window.initTechnicalChart = (data, selectedIndicators = [], chartId = 'technical
         return;
     }
     
+    // 计算横向滚动所需的容器宽度（每根K线给定像素宽度）
+    const scrollEl = document.getElementById(`${chartId}-scroll`);
+    const innerEl = document.getElementById(`${chartId}-inner`);
+    if (scrollEl && innerEl) {
+        const pxPerBar = 10; // 每个数据点的最小像素宽度
+        const labelsCount = Array.isArray(data.labels) ? data.labels.length : (data.klines ? data.klines.length : 0);
+        const minWidth = scrollEl.clientWidth || 600;
+        const targetWidth = Math.max(minWidth, labelsCount * pxPerBar);
+        innerEl.style.width = `${targetWidth}px`;
+    }
+
     if (window[chartId]?.destroy) try { window[chartId].destroy(); } catch (e) {}
     
     const datasets = [];
