@@ -115,6 +115,7 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
                     'reason': reason
                 })
             elif position_side == 'short':
+                action_flag = 1  # 方向翻转：空 -> 多，记为 BUY
                 # 先平空
                 exit_fee = order_fee(current_price, fixed_qty)
                 pnl_gross = (entry_price - current_price) * fixed_qty
@@ -167,6 +168,7 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
                     'reason': reason
                 })
             elif position_side == 'long':
+                action_flag = -1  # 方向翻转：多 -> 空，记为 SELL
                 # 先平多
                 exit_fee = order_fee(current_price, fixed_qty)
                 pnl_gross = (current_price - entry_price) * fixed_qty
