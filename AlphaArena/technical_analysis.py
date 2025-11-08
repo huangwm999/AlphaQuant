@@ -197,9 +197,15 @@ def get_sentiment_indicators():
                     # 计算净情绪（-1到1之间）
                     net_sentiment = (fear_greed_index - 50) / 50  # 归一化到-1到1
                     
+                    # 转换为前端期望的格式
+                    positive_ratio = max(0, net_sentiment)  # 乐观比例
+                    negative_ratio = max(0, -net_sentiment)  # 悲观比例
+                    
                     return {
                         'fear_greed_index': fear_greed_index,
                         'fear_greed_text': fear_greed_text,
+                        'positive_ratio': positive_ratio,
+                        'negative_ratio': negative_ratio,
                         'net_sentiment': net_sentiment,
                         'data_time': data_time.strftime('%Y-%m-%d %H:%M'),
                         'hours_old': round(hours_old, 1),
@@ -215,6 +221,8 @@ def get_sentiment_indicators():
         return {
             'fear_greed_index': 50,
             'fear_greed_text': 'Neutral (API失败)',
+            'positive_ratio': 0,
+            'negative_ratio': 0,
             'net_sentiment': 0,
             'data_time': datetime.now().strftime('%Y-%m-%d %H:%M'),
             'hours_old': 0,
@@ -227,6 +235,8 @@ def get_sentiment_indicators():
         return {
             'fear_greed_index': 50,
             'fear_greed_text': 'Neutral (错误)',
+            'positive_ratio': 0,
+            'negative_ratio': 0,
             'net_sentiment': 0,
             'data_time': datetime.now().strftime('%Y-%m-%d %H:%M'),
             'hours_old': 0,
