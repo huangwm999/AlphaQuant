@@ -26,6 +26,8 @@
             const [data, setData] = useState({ system: {}, trades: [], performance: {}, analysis: [] });
             const [technicalData, setTechnicalData] = useState(null);
             const [analysisPage, setAnalysisPage] = useState(1);
+            // 回测数据状态
+            const [backtest, setBacktest] = useState({ loading: false, data: null, error: null });
             const [analysisData, setAnalysisData] = useState({ data: [], pagination: {} });
             
             const handleLogout = () => {
@@ -68,6 +70,29 @@
                 const checkboxes = document.querySelectorAll('input[data-indicator]');
                 const selected = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.dataset.indicator);
                 window.initTechnicalChart && window.initTechnicalChart(technicalData, selected);
+            };
+
+            const runBacktest = async () => {
+                try {
+                    setBacktest(prev => ({ ...prev, loading: true, error: null }));
+                    const res = await fetch('/api/backtest', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ days: 2, interval: '3m' })
+                    });
+                    const result = await res.json();
+                    if (!res.ok) throw new Error(result.error || '回测失败');
+                    setBacktest({ loading: false, data: result, error: null });
+                    // 渲染回测图表
+                    setTimeout(() => {
+                        window.initBacktestCharts && window.initBacktestCharts(result);
+                    }, 50);
+                    message.success('回测完成');
+                } catch (err) {
+                    console.error('回测失败:', err);
+                    setBacktest({ loading: false, data: null, error: err.message || String(err) });
+                    message.error('回测失败: ' + (err.message || err));
+                }
             };
 
 
@@ -164,7 +189,7 @@
                                     h('label', null,
                                         h('input', { 
                                             type: 'checkbox', 
-                                            checked: true,
+                                            defaultChecked: true,
                                             onChange: (e) => window.updateTechnicalChart(),
                                             'data-indicator': 'price'
                                         }),
@@ -197,6 +222,7 @@
                                     h('label', null,
                                         h('input', { 
                                             type: 'checkbox',
+                                            defaultChecked: true,
                                             onChange: (e) => window.updateTechnicalChart(),
                                             'data-indicator': 'bollinger'
                                         }),
@@ -213,6 +239,7 @@
                                     h('label', null,
                                         h('input', { 
                                             type: 'checkbox',
+                                            defaultChecked: true,
                                             onChange: (e) => window.updateTechnicalChart(),
                                             'data-indicator': 'macd_signal'
                                         }),
@@ -237,6 +264,7 @@
                                     h('label', null,
                                         h('input', { 
                                             type: 'checkbox',
+                                            defaultChecked: true,
                                             onChange: (e) => window.updateTechnicalChart(),
                                             'data-indicator': 'decisions'
                                         }),
@@ -247,6 +275,45 @@
                                 h('div', { style: { height: '280px', padding: '10px' } },
                                     h('canvas', { id: 'technicalChart' })
                                 )
+                            )
+                        )
+                    ),
+
+                    // 回测视图
+                    h(Row, { gutter: [16, 16], style: { marginBottom: 16 } },
+                        h(Col, { xs: 24 },
+                            h(Card, { 
+                                title: h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                                    h('span', null, '复测视图 (最近2天 · 3分钟)'),
+                                    h(Space, null,
+                                        backtest.loading ? h('span', { style: { color: '#faad14' } }, '计算中…') : null,
+                                        h(Button, { type: 'primary', onClick: runBacktest, loading: backtest.loading }, '开始复测')
+                                    )
+                                ),
+                                style: { minHeight: 420 }
+                            },
+                                h(Row, { gutter: [16, 16] },
+                                    h(Col, { xs: 24, lg: 16 },
+                                        h('div', { style: { height: '320px', padding: '10px' } },
+                                            h('canvas', { id: 'backtestPriceChart' })
+                                        )
+                                    ),
+                                    h(Col, { xs: 24, lg: 8 },
+                                        h('div', { style: { height: '320px', padding: '10px' } },
+                                            h('canvas', { id: 'backtestEquityChart' })
+                                        )
+                                    )
+                                ),
+                                backtest.data ? h('div', { style: { padding: '8px 12px', background: '#fafafa', borderRadius: 8, marginTop: 8 } },
+                                    h(Space, { size: 'large' },
+                                        h('span', null, `数据点: ${backtest.data.summary.data_points}`),
+                                        h('span', null, `信号数: ${backtest.data.summary.total_signals}`),
+                                        h('span', null, `已平仓: ${backtest.data.summary.closed_trades}`),
+                                        h('span', { style: { color: backtest.data.summary.total_pnl >= 0 ? '#f5222d' : '#52c41a', fontWeight: 'bold' } }, `总收益: ${backtest.data.summary.total_pnl} USDT`),
+                                        h('span', null, `胜率: ${backtest.data.summary.win_rate}%`),
+                                        h('span', null, `均每笔: ${backtest.data.summary.avg_pnl_per_trade} USDT`)
+                                    )
+                                ) : null
                             )
                         )
                     ),

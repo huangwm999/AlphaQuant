@@ -360,3 +360,100 @@ window.initTechnicalChart = (data, selectedIndicators = []) => {
         }
     });
 };
+
+// 回测图表渲染：价格+决策柱状 / 权益曲线
+window.initBacktestCharts = (bt) => {
+    if (!bt) return;
+    const priceCtx = document.getElementById('backtestPriceChart');
+    const equityCtx = document.getElementById('backtestEquityChart');
+    if (!priceCtx || !equityCtx) return;
+
+    // 清理旧实例
+    if (window.backtestPriceChart?.destroy) try { window.backtestPriceChart.destroy(); } catch (e) {}
+    if (window.backtestEquityChart?.destroy) try { window.backtestEquityChart.destroy(); } catch (e) {}
+
+    // 价格 + 决策
+    const decisionColors = bt.decisions.map(d => 
+        d === 1 ? 'rgba(82,196,26,0.8)' : d === -1 ? 'rgba(245,34,45,0.8)' : 'rgba(140,140,140,0.3)'
+    );
+    const decisionBorders = bt.decisions.map(d => 
+        d === 1 ? '#52c41a' : d === -1 ? '#f5222d' : '#8c8c8c'
+    );
+
+    window.backtestPriceChart = new Chart(priceCtx, {
+        type: 'bar',
+        data: {
+            labels: bt.labels,
+            datasets: [
+                {
+                    type: 'line',
+                    label: '价格',
+                    data: bt.prices,
+                    borderColor: '#1890ff',
+                    backgroundColor: 'rgba(24,144,255,0.08)',
+                    tension: 0.15,
+                    yAxisID: 'y-price'
+                },
+                {
+                    label: '决策',
+                    data: bt.decisions,
+                    backgroundColor: decisionColors,
+                    borderColor: decisionBorders,
+                    borderWidth: 1,
+                    yAxisID: 'y-decision',
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'nearest', axis: 'x', intersect: false },
+            scales: {
+                'y-price': {
+                    type: 'linear', position: 'left', ticks: { callback: v => `$${v}` }
+                },
+                'y-decision': {
+                    type: 'linear', position: 'right', min: -1.5, max: 1.5,
+                    ticks: {
+                        stepSize: 1,
+                        callback: v => v === 1 ? 'BUY' : v === -1 ? 'SELL' : 'HOLD'
+                    }
+                }
+            },
+            plugins: {
+                legend: { display: true, position: 'top' },
+                tooltip: { intersect: false }
+            }
+        }
+    });
+
+    // 权益曲线
+    window.backtestEquityChart = new Chart(equityCtx, {
+        type: 'line',
+        data: {
+            labels: bt.labels,
+            datasets: [
+                {
+                    label: '累计收益 (USDT)',
+                    data: bt.equity_curve,
+                    borderColor: bt.summary.total_pnl >= 0 ? '#f5222d' : '#52c41a',
+                    backgroundColor: bt.summary.total_pnl >= 0 ? 'rgba(245,34,45,0.12)' : 'rgba(82,196,26,0.12)',
+                    tension: 0.15,
+                    fill: true
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                y: { ticks: { callback: v => `${v} U` } }
+            },
+            plugins: {
+                legend: { display: true },
+                tooltip: { intersect: false }
+            }
+        }
+    });
+};

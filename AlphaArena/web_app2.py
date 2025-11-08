@@ -222,6 +222,26 @@ def get_technical_chart_data():
         print(f"获取技术图表数据失败: {e}")
         return jsonify({'error': str(e)}), 500
 
+
+@app.route('/api/backtest', methods=['POST'])
+def run_backtest_api():
+    """回测接口：默认回测最近2天，3分钟级别。可选传参 days, interval。"""
+    try:
+        # 延迟导入，避免循环依赖
+        from backtest import run_backtest
+
+        data = request.get_json(silent=True) or {}
+        days = int(data.get('days', 2))
+        interval = data.get('interval', '3m')
+
+        result = run_backtest(days=days, interval=interval)
+        if 'error' in result:
+            return jsonify(result), 500
+        return jsonify(result)
+    except Exception as e:
+        print(f"回测执行失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
