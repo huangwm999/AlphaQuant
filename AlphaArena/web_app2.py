@@ -5,7 +5,7 @@ from flask_cors import CORS
 import os
 from datetime import datetime, timedelta
 from data_manager import data_manager
-from deepseekok3 import get_btc_ohlcv_for_web, calculate_integrated_trading_score
+from deepseekok3 import exchange, TRADE_CONFIG
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 CORS(app)
@@ -73,9 +73,11 @@ def get_technical_chart_data():
         import sys
         sys.path.append(os.path.dirname(__file__))
         
-        # 尝试导入deepseekok3的公共函数
+        # 尝试导入deepseekok3的公共函数和依赖
         try:
-            from deepseekok3 import get_btc_ohlcv_for_web
+            from market_data import get_btc_ohlcv_for_web
+            from technical_analysis import calculate_technical_indicators, get_sentiment_indicators, calculate_integrated_trading_score
+            from deepseekok3 import exchange, TRADE_CONFIG
             print("✅ 成功导入deepseekok3的公共函数")
         except ImportError as e:
             print(f"❌ 导入deepseekok3失败: {e}")
@@ -85,7 +87,7 @@ def get_technical_chart_data():
         # 使用deepseekok3的公共函数获取数据
         try:
             # 使用共享函数获取数据和指标
-            web_data = get_btc_ohlcv_for_web()
+            web_data = get_btc_ohlcv_for_web(exchange, TRADE_CONFIG, calculate_technical_indicators, get_sentiment_indicators, calculate_integrated_trading_score)
             if not web_data:
                 return jsonify({'error': '无法获取市场数据'}), 500
             
