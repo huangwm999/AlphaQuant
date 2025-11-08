@@ -84,10 +84,42 @@ def get_technical_chart_data():
             # 如果导入失败，回退到本地实现
             return jsonify({'error': '无法导入交易引擎模块'}), 500
         
+        # 解析可选的 days 参数（默认2天）来动态控制数据窗口大小
+        try:
+            days = int(request.args.get('days', 2))
+        except Exception:
+            days = 2
+        days = max(1, min(days, 30))  # 安全边界：1~30天
+
+        def tf_to_minutes(tf: str) -> int:
+            try:
+                tf = (tf or '').lower().strip()
+                if tf.endswith('m'):
+                    return max(int(tf[:-1]), 1)
+                if tf.endswith('h'):
+                    return max(int(tf[:-1]) * 60, 1)
+                if tf.endswith('d'):
+                    return max(int(tf[:-1]) * 60 * 24, 1)
+            except Exception:
+                pass
+            return 15
+
         # 使用deepseekok3的公共函数获取数据
         try:
             # 使用共享函数获取数据和指标
-            web_data = get_btc_ohlcv_for_web(exchange, TRADE_CONFIG, calculate_technical_indicators, get_sentiment_indicators, calculate_integrated_trading_score)
+            # 根据 days 计算需要的K线数量（以timeframe为步长）
+            tf_minutes = tf_to_minutes(TRADE_CONFIG.get('timeframe', '15m'))
+            per_day_bars = max(int((24 * 60) / tf_minutes), 1)
+            data_points = int(days * per_day_bars) + 2  # 加2根缓冲
+
+            # 构建局部配置，避免修改全局 TRADE_CONFIG
+            local_config = dict(TRADE_CONFIG)
+            local_config['data_points'] = min(max(data_points, 10), 2000)
+
+            web_data = get_btc_ohlcv_for_web(
+                exchange, local_config,
+                calculate_technical_indicators, get_sentiment_indicators, calculate_integrated_trading_score
+            )
             if not web_data:
                 return jsonify({'error': '无法获取市场数据'}), 500
             
@@ -140,16 +172,26 @@ def get_technical_chart_data():
                             'signal': trade_signals
                         })
                         
-                        # 使用pandas的merge_asof进行最近时间匹配
-                        # tolerance参数限制最大时间差为20分钟
+                        # 根据时间周期动态设置匹配容忍度（默认回退15分钟）并强制向后对齐（backward）
+                        tol_minutes = tf_to_minutes(timeframe) if 'timeframe' in locals() else 15
+
+                        # 方案更新：改用K线【开盘时间】进行对齐，消除“延时显示”
+                        # 解释：
+                        #  - 以前使用 close_time(backward) 会导致：
+                        #    * 在一根K线进行中（trade_time 位于 open 和 close 之间），因尚未到 close_time，无法匹配到该K线 -> 显示延时
+                        #    * trade_time 恰好等于下一根 open，会归到上一根（视觉上也显得“落后一根”）
+                        #  - 现在使用 open_time(backward)：
+                        #    * 任意 trade_time ∈ [open_i, open_{i+1}) 将匹配到 index=i，实时归属当前正在走的K线
+                        #    * trade_time == open_{i+1} 将归于新开的一根 index=i+1，更符合直觉
                         kline_df = df[['timestamp']].copy().reset_index()
+
                         matched = pd.merge_asof(
                             trade_df.sort_values('trade_time'),
                             kline_df.sort_values('timestamp'),
                             left_on='trade_time',
                             right_on='timestamp',
-                            tolerance=pd.Timedelta(minutes=20),
-                            direction='nearest'
+                            tolerance=pd.Timedelta(minutes=tol_minutes),
+                            direction='backward'
                         )
                         
                         # 设置决策信号
@@ -158,7 +200,7 @@ def get_technical_chart_data():
                             if pd.notna(row['index']):  # 有匹配的K线
                                 decision_signals[int(row['index'])] = row['signal']
                                 matched_count += 1
-                                print(f"交易匹配: {row['trade_time']} -> K线索引 {int(row['index'])}, 信号 {row['signal']}")
+                                print(f"交易匹配: {row['trade_time']} 归属开盘 {row['timestamp']} -> 索引 {int(row['index'])}, 信号 {row['signal']}")
                         
                         print(f"决策信号匹配完成，匹配成功: {matched_count}/{len(trade_df)} 条交易")
                     else:
@@ -203,6 +245,7 @@ def get_technical_chart_data():
                 'current': {
                     'price': current_price,
                     'timeframe': timeframe,
+                    'days': days,
                     'current_score': float(df['score'].iloc[-1]),
                     'score_trend': 'bullish' if df['score'].iloc[-1] > 0 else 'bearish' if df['score'].iloc[-1] < 0 else 'neutral',
                     'latest_decision': decision_signals[-1] if decision_signals else 0

@@ -62,6 +62,53 @@ deepseek_client = OpenAI(
 # 初始化策略接口
 strategy_interface = StrategyInterface(deepseek_client)
 
+# 统一交易记录封装，确保前端匹配到K线
+def record_trade(action: str, side: str, size: float, ref_price: float, response: dict, signal_data: dict, extra: dict | None = None):
+    """构造并保存一条标准化交易记录到 trades.json。
+    - 时间戳采用上海时区字符串 '%Y-%m-%d %H:%M:%S'
+    - 保存 signal/confidence/reason 字段，方便技术图 merge_asof 匹配
+    - 兼容旧字段 price/size
+    """
+    try:
+        ts = pd.Timestamp.now(tz='Asia/Shanghai').strftime('%Y-%m-%d %H:%M:%S')
+    except Exception:
+        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    # 尝试提取订单关键信息（不同交易所字段兼容）
+    order_id = None
+    try:
+        order_id = response.get('id') or response.get('orderId') or (response.get('data') or {}).get('ordId')
+    except Exception:
+        order_id = None
+    try:
+        avg_price = response.get('average') or response.get('price') or response.get('lastFillPrice') or ref_price
+    except Exception:
+        avg_price = ref_price
+
+    trade_record = {
+        'timestamp': ts,
+        'action': action,
+        'side': side,
+        'qty': round(float(size), 6),
+        'ref_price': round(float(ref_price), 2),
+        'fill_price': round(float(avg_price), 2) if isinstance(avg_price, (int, float)) else avg_price,
+        'order_id': order_id,
+        'signal': signal_data.get('signal'),
+        'confidence': signal_data.get('confidence'),
+        'reason': signal_data.get('reason'),
+        'strategy_version': signal_data.get('strategy_version'),
+        'order_raw': response
+    }
+    if extra:
+        trade_record.update(extra)
+
+    # 兼容旧字段命名
+    trade_record['price'] = trade_record['ref_price']
+    trade_record['size'] = trade_record['qty']
+
+    save_trade_record(trade_record)
+    return trade_record
+
 # 初始化OKX交易所
 exchange = ccxt.okx({
     'options': {
@@ -284,9 +331,9 @@ def execute_intelligent_trade(signal_data, price_data):
                 )
                 print(f"✅ 开多成功: {open_response}")
                 
-                # 保存两个交易记录
-                save_trade_record('CLOSE_SHORT', current_size, price_data['price'], close_response, signal_data)
-                save_trade_record('OPEN_LONG', trade_size, price_data['price'], open_response, signal_data)
+                # 保存两个交易记录（统一格式）
+                record_trade('CLOSE_SHORT', 'buy', current_size, price_data['price'], close_response, signal_data)
+                record_trade('OPEN_LONG', 'buy', trade_size, price_data['price'], open_response, signal_data)
                 save_trade_log('CLOSE_SHORT', 'buy', current_size, close_response)
                 save_trade_log('OPEN_LONG', 'buy', trade_size, open_response)
                 return
@@ -299,9 +346,9 @@ def execute_intelligent_trade(signal_data, price_data):
                 )
                 print(f"✅ 开多成功: {response}")
             
-            # 保存交易记录
+            # 保存交易记录（统一格式）
             action = 'OPEN_LONG' if not current_position else 'ADD_LONG'
-            save_trade_record(action, trade_size, price_data['price'], response, signal_data)
+            record_trade(action, 'buy', trade_size, price_data['price'], response, signal_data)
             save_trade_log(action, 'buy', trade_size, response)
 
         elif signal_data['signal'] == 'SELL':
@@ -332,9 +379,9 @@ def execute_intelligent_trade(signal_data, price_data):
                 )
                 print(f"✅ 开空成功: {open_response}")
                 
-                # 保存两个交易记录
-                save_trade_record('CLOSE_LONG', current_size, price_data['price'], close_response, signal_data)
-                save_trade_record('OPEN_SHORT', trade_size, price_data['price'], open_response, signal_data)
+                # 保存两个交易记录（统一格式）
+                record_trade('CLOSE_LONG', 'sell', current_size, price_data['price'], close_response, signal_data)
+                record_trade('OPEN_SHORT', 'sell', trade_size, price_data['price'], open_response, signal_data)
                 save_trade_log('CLOSE_LONG', 'sell', current_size, close_response)
                 save_trade_log('OPEN_SHORT', 'sell', trade_size, open_response)
                 return
@@ -347,9 +394,9 @@ def execute_intelligent_trade(signal_data, price_data):
                 )
                 print(f"✅ 开空成功: {response}")
                 
-            # 保存交易记录
+            # 保存交易记录（统一格式）
             action = 'OPEN_SHORT' if not current_position else 'ADD_SHORT'
-            save_trade_record(action, trade_size, price_data['price'], response, signal_data)
+            record_trade(action, 'sell', trade_size, price_data['price'], response, signal_data)
             save_trade_log(action, 'sell', trade_size, response)
 
         else:  # HOLD或其他

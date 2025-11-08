@@ -46,8 +46,44 @@ def interval_to_minutes(interval: str) -> int:
     # 默认按分钟处理
     return max(int(''.join(ch for ch in interval if ch.isdigit()) or '3'), 1)
 
+def fetch_since_paginated(exchange: ccxt.Exchange, symbol: str, timeframe: str, since_ms: int, max_candles: int = 1200, page_limit: int = 200):
+    """从指定since开始分页获取K线，直至达到max_candles或无更多数据。
+    OKX部分周期单次limit较小，采用分页方式更稳妥。
+    返回已转换为上海时区的DataFrame。
+    """
+    all_rows = []
+    cursor = since_ms
+    safety = 0
+    while len(all_rows) < max_candles and safety < 20:
+        safety += 1
+        try:
+            chunk = exchange.fetch_ohlcv(symbol, timeframe=timeframe, since=cursor, limit=page_limit)
+        except Exception:
+            break
+        if not chunk:
+            break
+        all_rows.extend(chunk)
+        # 推进游标到最后一根之后，避免重复
+        cursor = chunk[-1][0] + 1
 
-def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
+        # 简单的停止条件：如果返回的数量少于page_limit，认为到尾部
+        if len(chunk) < page_limit:
+            break
+
+    if not all_rows:
+        return pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
+
+    # 去重并组装
+    df = pd.DataFrame(all_rows, columns=["timestamp", "open", "high", "low", "close", "volume"])
+    df = df.drop_duplicates(subset=['timestamp']).sort_values('timestamp')
+    # 仅保留自since_ms之后的数据
+    df = df[df['timestamp'] >= since_ms]
+    # 转换为上海时区
+    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms').dt.tz_localize('UTC').dt.tz_convert('Asia/Shanghai').dt.tz_localize(None)
+    return df
+
+
+def run_backtest(days: int = 2, interval: str = '15m') -> Dict[str, Any]:
     """
     运行回测。
     Args:
@@ -57,12 +93,26 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
         dict: { labels, prices, decisions, trades, equity_curve, summary }
     """
     symbol = TRADE_CONFIG['symbol']
-    # 与技术指标分析对齐：直接按数量取最近N根，而不是用since
+    # 计算两天所需根数
     minutes = interval_to_minutes(interval)
     per_day = int(24 * 60 / minutes)
-    candles_needed = days * per_day + 10  # +10 余量
+    expected_candles = days * per_day
 
-    df = fetch_recent(exchange, symbol, interval, limit=candles_needed)
+    # 以北京时间为参考计算since，再转换为UTC毫秒
+    now_sh = pd.Timestamp.now(tz='Asia/Shanghai')
+    since_sh = now_sh - timedelta(days=days)
+    since_utc = since_sh.tz_convert('UTC')
+    since_ms = int(since_utc.timestamp() * 1000)
+
+    # 优先分页抓取，确保覆盖完整两天区间
+    df = fetch_since_paginated(exchange, symbol, interval, since_ms=since_ms, max_candles=expected_candles + 50)
+    if df.empty or len(df) < expected_candles:
+        # 退化为按数量抓取最近N根，至少提供可用数据
+        df = fetch_recent(exchange, symbol, interval, limit=expected_candles + 50)
+
+    # 保留最后 expected_candles 根，确保最新两天
+    if not df.empty and len(df) > expected_candles:
+        df = df.iloc[-expected_candles:]
     if df.empty:
         return { 'error': '无法获取历史数据' }
 
@@ -287,6 +337,9 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
         'net_pnl_total': round(cumulative_pnl, 2),
         'avg_pnl_gross': round(avg_pnl_gross, 2),
         'avg_pnl_net': round(avg_pnl_net, 2),
+        'time_start': df['timestamp'].iloc[0].strftime('%Y-%m-%d %H:%M:%S') if len(df) else None,
+        'time_end': df['timestamp'].iloc[-1].strftime('%Y-%m-%d %H:%M:%S') if len(df) else None,
+        'timezone': 'Asia/Shanghai',
         # 兼容旧字段名（用于前端已存在的显示逻辑）
         'total_pnl': round(cumulative_pnl, 2),
         'avg_pnl_per_trade': round(avg_pnl_net, 2)

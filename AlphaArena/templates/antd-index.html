@@ -19,15 +19,17 @@
     <div id="root"></div>
     <script type="text/babel">
         const { useState, useEffect } = React;
-        const { Layout, Card, Row, Col, Table, Button, message, Typography, Space, Tabs, Statistic, Pagination } = antd;
+    const { Layout, Card, Row, Col, Table, Button, message, Typography, Space, Tabs, Statistic, Pagination, InputNumber } = antd;
         const { Text } = Typography;
 
         function App() {
             const [data, setData] = useState({ system: {}, trades: [], performance: {}, analysis: [] });
             const [technicalData, setTechnicalData] = useState(null);
             const [analysisPage, setAnalysisPage] = useState(1);
+            const [days, setDays] = useState(1); // 技术图窗口天数（默认1）
             // 回测数据状态
             const [backtest, setBacktest] = useState({ loading: false, data: null, error: null });
+            const [backtestDays, setBacktestDays] = useState(2); // 回测天数（默认2）
             const [analysisData, setAnalysisData] = useState({ data: [], pagination: {} });
             
             const handleLogout = () => {
@@ -52,8 +54,11 @@
                 try {
                     const t = Date.now();
                     const [system, trades, performance, technical] = await Promise.all([
-                        '/api/system-status', '/api/trade-history', '/api/performance', '/api/technical-chart'
-                    ].map(url => fetch(`${url}?_t=${t}`).then(r => r.json())));
+                        fetch(`/api/system-status?_t=${t}`).then(r => r.json()),
+                        fetch(`/api/trade-history?_t=${t}`).then(r => r.json()),
+                        fetch(`/api/performance?_t=${t}`).then(r => r.json()),
+                        fetch(`/api/technical-chart?days=${days}&_t=${t}`).then(r => r.json())
+                    ]);
                     setData({ system: system || {}, trades: trades || [], performance: performance || {} });
                     setTechnicalData(technical);
                     
@@ -78,7 +83,7 @@
                     const res = await fetch('/api/backtest', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ days: 2, interval: '15m' })
+                        body: JSON.stringify({ days: backtestDays, interval: '15m' })
                     });
                     const result = await res.json();
                     if (!res.ok) throw new Error(result.error || '回测失败');
@@ -101,7 +106,8 @@
 
             window.updateTechnicalChart = updateTechnicalChart;
 
-            useEffect(() => { loadData(); const timer = setInterval(loadData, 5000); return () => clearInterval(timer); }, []);
+            // days 变化时立即刷新技术图并重建定时刷新
+            useEffect(() => { loadData(); const timer = setInterval(loadData, 5000); return () => clearInterval(timer); }, [days]);
             useEffect(() => { loadAnalysisData(); }, []); // 初始加载AI分析数据
             useEffect(() => data.trades?.length && window.initPriceChart && setTimeout(() => window.initPriceChart(data.trades), 100), [data.trades]);
             useEffect(() => data.performance?.daily_pnl && window.initDailyPnlChart && setTimeout(() => window.initDailyPnlChart(data.performance.daily_pnl), 100), [data.performance]);
@@ -160,7 +166,7 @@
                         h(Col, { xs: 24 },
                             h(Card, { 
                                 title: h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-                                    h('span', null, '技术指标分析'),
+                                    h('span', null, `技术指标分析${technicalData?.current?.days ? '（最近' + technicalData.current.days + '天）' : ''}`),
                                     // 市场情绪信息
                                     technicalData?.sentiment ? 
                                         h('div', { style: { fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' } },
@@ -186,8 +192,21 @@
                                         h('span', { style: { fontSize: '12px', color: '#999' } }, '情绪数据获取中...')
                                 ),
                                 style: { height: 450 } },
-                                // 指标选择器
+                                // 控件 + 指标选择器
                                 h('div', { className: 'indicator-controls' },
+                                    // 天数输入控件（1~30，默认2）
+                                    h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginRight: 12 } },
+                                        h('span', { style: { fontSize: '12px', color: '#666' } }, '天数'),
+                                        h(InputNumber, {
+                                            min: 1, max: 30, size: 'small', value: days,
+                                            onChange: (v) => {
+                                                const nv = Number(v) || 2;
+                                                if (nv < 1 || nv > 30) return;
+                                                setDays(nv);
+                                            },
+                                            style: { width: 80 }
+                                        })
+                                    ),
                                     h('label', null,
                                         h('input', { 
                                             type: 'checkbox', 
@@ -286,16 +305,29 @@
                         h(Col, { xs: 24 },
                             h(Card, { 
                                 title: h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-                                    h('span', null, '复测视图 (最近2天 · 15分钟)'),
-                                    h(Space, null,
+                                    h('span', null, `回测视图 (最近${backtestDays}天 · 15分钟)`),
+                                    h(Space, { size: 'middle' },
                                         backtest.loading ? h('span', { style: { color: '#faad14' } }, '计算中…') : null,
                                         h(Button, { type: 'primary', onClick: runBacktest, loading: backtest.loading }, '开始复测')
                                     )
                                 ),
                                 style: { minHeight: 450 }
                             },
-                                // 复测的指标选择器（与上方保持一致）
+                                // 回测的指标选择器（与上方保持一致）
                                 h('div', { className: 'indicator-controls' },
+                                    // 回测天数输入控件（1~30，默认2）
+                                    h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginRight: 12 } },
+                                        h('span', { style: { fontSize: '12px', color: '#666' } }, '天数'),
+                                        h(InputNumber, {
+                                            min: 1, max: 30, size: 'small', value: backtestDays,
+                                            onChange: (v) => {
+                                                const nv = Number(v) || 2;
+                                                if (nv < 1 || nv > 30) return;
+                                                setBacktestDays(nv);
+                                            },
+        								style: { width: 80 }
+                                        })
+                                    ),
                                     h('label', null,
                                         h('input', { type: 'checkbox', defaultChecked: true, onChange: () => {
                                             if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart');
@@ -329,8 +361,8 @@
                                         h('input', { type: 'checkbox', defaultChecked: true, onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'decisions' }), '交易决策'
                                     )
                                 ),
-                                // 图表区域（高度调低一半 560px -> 280px）
-                                h('div', { id: 'backtestTechnicalChart-scroll', style: { height: '280px', padding: '10px', overflowX: 'auto' } },
+                                // 图表区域（高度调整为当前的150%：280px -> 420px）
+                                h('div', { id: 'backtestTechnicalChart-scroll', style: { height: '420px', padding: '10px', overflowX: 'auto' } },
                                     h('div', { id: 'backtestTechnicalChart-inner', style: { minWidth: '100%', height: '100%' } },
                                         h('canvas', { id: 'backtestTechnicalChart', style: { height: '100%', width: '100%' } })
                                     )
