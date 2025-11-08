@@ -14,11 +14,12 @@ from market_data import (
     get_btc_ohlcv_enhanced, get_current_position, get_btc_ohlcv_for_web
 )
 from technical_analysis import (
-    calculate_technical_indicators, get_support_resistance_levels,
+    calculate_sma, calculate_macd, calculate_rsi,
+    calculate_bollinger_bands, calculate_atr, calculate_stoch_rsi,
     get_market_trend, generate_technical_analysis_text,
     get_sentiment_indicators, calculate_integrated_trading_score
 )
-from strategy_decision import StrategyAnalyzer
+from strategy_decision import StrategyInterface
 
 def save_trade_log(action, side, size, response):
     """保存交易日志到data/trade_logs.json"""
@@ -53,14 +54,14 @@ load_dotenv()
 # 初始化数据管理器
 data_manager = DataManager()
 
-# 初始化DeepSeek客户端
+# 创建 DeepSeek AI 客户端
 deepseek_client = OpenAI(
     api_key=os.getenv('DEEPSEEK_API_KEY'),
     base_url="https://api.deepseek.com"
 )
 
-# 初始化策略分析器
-strategy_analyzer = StrategyAnalyzer(deepseek_client)
+# 初始化策略接口
+strategy_interface = StrategyInterface(deepseek_client)
 
 # 初始化OKX交易所
 exchange = ccxt.okx({
@@ -406,8 +407,8 @@ def trading_bot():
             'unrealized_pnl': current_position['unrealized_pnl']
         }
 
-    # 4. 使用策略分析器进行市场分析（带重试）
-    signal_data = strategy_analyzer.analyze_market_strategy(
+    # 4. 使用策略接口进行市场分析（带重试）
+    signal_data = strategy_interface.analyze_market_strategy(
         price_data, generate_technical_analysis_text, 
         get_recent_ai_analysis, get_recent_trades, signal_history
     )
