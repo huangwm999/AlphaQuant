@@ -99,8 +99,8 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
         current_price = price_data['price']
 
         if signal == 'BUY':
-            action_flag = 1
             if position_side is None:
+                action_flag = 1
                 # 开多
                 entry_price = current_price
                 entry_fee = order_fee(current_price, fixed_qty)
@@ -148,11 +148,11 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
                     'reason': reason
                 })
             else:
-                # 已经是long，忽略重复开仓
-                pass
+                # 已经是long，重复BUY信号 -> 不增仓，决策记为 HOLD
+                action_flag = 0
         elif signal == 'SELL':
-            action_flag = -1
             if position_side is None:
+                action_flag = -1
                 # 开空
                 entry_price = current_price
                 entry_fee = order_fee(current_price, fixed_qty)
@@ -200,8 +200,8 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
                     'reason': reason
                 })
             else:
-                # 已经是short，忽略重复开仓
-                pass
+                # 已经是short，重复SELL信号 -> 不增仓，决策记为 HOLD
+                action_flag = 0
         else:
             action_flag = 0
 
