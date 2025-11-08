@@ -78,7 +78,7 @@
                     const res = await fetch('/api/backtest', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ days: 2, interval: '3m' })
+                        body: JSON.stringify({ days: 2, interval: '15m' })
                     });
                     const result = await res.json();
                     if (!res.ok) throw new Error(result.error || '回测失败');
@@ -286,7 +286,7 @@
                         h(Col, { xs: 24 },
                             h(Card, { 
                                 title: h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-                                    h('span', null, '复测视图 (最近2天 · 3分钟)'),
+                                    h('span', null, '复测视图 (最近2天 · 15分钟)'),
                                     h(Space, null,
                                         backtest.loading ? h('span', { style: { color: '#faad14' } }, '计算中…') : null,
                                         h(Button, { type: 'primary', onClick: runBacktest, loading: backtest.loading }, '开始复测')
@@ -329,7 +329,7 @@
                                         h('input', { type: 'checkbox', defaultChecked: true, onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'decisions' }), '交易决策'
                                     )
                                 ),
-                                // 图表区域（外层保持280px，图表填满容器高度）
+                                // 图表区域（高度调低一半 560px -> 280px）
                                 h('div', { id: 'backtestTechnicalChart-scroll', style: { height: '280px', padding: '10px', overflowX: 'auto' } },
                                     h('div', { id: 'backtestTechnicalChart-inner', style: { minWidth: '100%', height: '100%' } },
                                         h('canvas', { id: 'backtestTechnicalChart', style: { height: '100%', width: '100%' } })
