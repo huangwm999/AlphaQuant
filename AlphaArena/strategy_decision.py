@@ -13,6 +13,7 @@ class StrategyInterface:
     - strategy_decision_v1: 基于LLM的智能分析策略
     - strategy_decision_v2: MACD Signal线V型/倒V型转折策略
     - strategy_decision_v3: 布林带下轨突破 + MACD倒V卖出混合策略
+    - strategy_decision_v4: MACD Signal线V型转折 + 布林带突破(MACD下降)
     """
     
     def __init__(self, deepseek_client, strategy_version='strategy_decision_v2'):
@@ -21,7 +22,7 @@ class StrategyInterface:
         
         Args:
             deepseek_client: DeepSeek AI客户端。
-            strategy_version: 策略版本 ('strategy_decision_v1', 'strategy_decision_v2', 'strategy_decision_v3')，默认 'strategy_decision_v2'
+            strategy_version: 策略版本 ('strategy_decision_v1', 'strategy_decision_v2', 'strategy_decision_v3', 'strategy_decision_v4')，默认 'strategy_decision_v2'
         """
         self.strategy_version = strategy_version
         self._load_strategy(deepseek_client)
@@ -32,6 +33,8 @@ class StrategyInterface:
             from strategy_decision_v1 import StrategyAnalyzer
         elif self.strategy_version == 'strategy_decision_v3':
             from strategy_decision_v3 import StrategyAnalyzer
+        elif self.strategy_version == 'strategy_decision_v4':
+            from strategy_decision_v4 import StrategyAnalyzer
         else:  # 默认 strategy_decision_v2
             from strategy_decision_v2 import StrategyAnalyzer
         

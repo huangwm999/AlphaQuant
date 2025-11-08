@@ -31,6 +31,7 @@
             // 回测数据状态
             const [backtest, setBacktest] = useState({ loading: false, data: null, error: null });
             const [backtestDays, setBacktestDays] = useState(2); // 回测天数（默认2）
+            const [backtestEndTime, setBacktestEndTime] = useState(''); // 回测截至时间
             const [backtestStrategy, setBacktestStrategy] = useState('strategy_decision_v2'); // 回测策略版本
             const [analysisData, setAnalysisData] = useState({ data: [], pagination: {} });
             // 策略配置状态
@@ -118,7 +119,8 @@
                         body: JSON.stringify({ 
                             days: backtestDays, 
                             interval: '15m',
-                            strategy_version: backtestStrategy 
+                            strategy_version: backtestStrategy,
+                            end_time: backtestEndTime || undefined  // 截至时间（空则使用当前时间）
                         })
                     });
                     const result = await res.json();
@@ -244,14 +246,14 @@
                                 style: { height: 450 } },
                                 // 控件 + 指标选择器
                                 h('div', { className: 'indicator-controls' },
-                                    // 天数输入控件（1~30，默认2）
+                                    // 天数输入控件（1~300，默认2）
                                     h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginRight: 12 } },
                                         h('span', { style: { fontSize: '12px', color: '#666' } }, '天数'),
                                         h(InputNumber, {
-                                            min: 1, max: 30, size: 'small', value: days,
+                                            min: 1, max: 300, size: 'small', value: days,
                                             onChange: (v) => {
                                                 const nv = Number(v) || 2;
-                                                if (nv < 1 || nv > 30) return;
+                                                if (nv < 1 || nv > 300) return;
                                                 setDays(nv);
                                             },
                                             style: { width: 80 }
@@ -363,38 +365,54 @@
                                 ),
                                 style: { minHeight: 450 }
                             },
-                                // 回测的指标选择器（与上方保持一致）
-                                h('div', { className: 'indicator-controls' },
-                                    // 回测天数输入控件（1~30，默认2）
-                                    h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginRight: 12 } },
-                                        h('span', { style: { fontSize: '12px', color: '#666' } }, '天数'),
-                                        h(InputNumber, {
-                                            min: 1, max: 30, size: 'small', value: backtestDays,
-                                            onChange: (v) => {
-                                                const nv = Number(v) || 2;
-                                                if (nv < 1 || nv > 30) return;
-                                                setBacktestDays(nv);
-                                            },
-        								style: { width: 80 }
-                                        })
-                                    ),
-                                    // 策略版本选择器
-                                    h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginRight: 12 } },
-                                        h('span', { style: { fontSize: '12px', color: '#666' } }, '策略'),
-                                        h(Select, {
-                                            size: 'small',
-                                            value: backtestStrategy,
-                                            onChange: (value) => setBacktestStrategy(value),
-                                            style: { width: 200 }
-                                        }, 
-                                            availableStrategies.map(strategy => 
-                                                h(Option, { 
-                                                    key: strategy.version, 
-                                                    value: strategy.version
-                                                }, strategy.version)
+                                // 回测的控件区域：分为两行
+                                h('div', { style: { marginBottom: '8px' } },
+                                    // 第一行：截至时间、天数、策略
+                                    h('div', { style: { marginBottom: '8px' } },
+                                        // 截至时间输入控件
+                                        h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginRight: 12 } },
+                                            h('span', { style: { fontSize: '12px', color: '#666' } }, '截至时间'),
+                                            h('input', {
+                                                type: 'datetime-local',
+                                                style: { fontSize: '12px', padding: '4px 8px', border: '1px solid #d9d9d9', borderRadius: '2px' },
+                                                value: backtestEndTime,
+                                                onChange: (e) => setBacktestEndTime(e.target.value),
+                                                title: '回测截至时间，默认为当前时间'
+                                            })
+                                        ),
+                                        // 回测天数输入控件（1~300，默认2）
+                                        h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginRight: 12 } },
+                                            h('span', { style: { fontSize: '12px', color: '#666' } }, '天数'),
+                                            h(InputNumber, {
+                                                min: 1, max: 300, size: 'small', value: backtestDays,
+                                                onChange: (v) => {
+                                                    const nv = Number(v) || 2;
+                                                    if (nv < 1 || nv > 300) return;
+                                                    setBacktestDays(nv);
+                                                },
+            								style: { width: 80 }
+                                            })
+                                        ),
+                                        // 策略版本选择器
+                                        h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginRight: 12 } },
+                                            h('span', { style: { fontSize: '12px', color: '#666' } }, '策略'),
+                                            h(Select, {
+                                                size: 'small',
+                                                value: backtestStrategy,
+                                                onChange: (value) => setBacktestStrategy(value),
+                                                style: { width: 200 }
+                                            }, 
+                                                availableStrategies.map(strategy => 
+                                                    h(Option, { 
+                                                        key: strategy.version, 
+                                                        value: strategy.version
+                                                    }, strategy.version)
+                                                )
                                             )
                                         )
                                     ),
+                                    // 第二行：指标选择器
+                                    h('div', { className: 'indicator-controls' },
                                     h('label', null,
                                         h('input', { type: 'checkbox', defaultChecked: true, onChange: () => {
                                             if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart');
@@ -426,6 +444,7 @@
                                     ),
                                     h('label', null,
                                         h('input', { type: 'checkbox', defaultChecked: true, onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'decisions' }), '交易决策'
+                                    )
                                     )
                                 ),
                                 // 图表区域（高度调整为当前的150%：280px -> 420px）

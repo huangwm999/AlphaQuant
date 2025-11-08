@@ -54,14 +54,18 @@ def fetch_since_paginated(exchange: ccxt.Exchange, symbol: str, timeframe: str, 
     all_rows = []
     cursor = since_ms
     safety = 0
-    while len(all_rows) < max_candles and safety < 20:
+    max_iterations = max(50, (max_candles // page_limit) + 10)  # 动态计算最大迭代次数
+    
+    while len(all_rows) < max_candles and safety < max_iterations:
         safety += 1
         try:
             chunk = exchange.fetch_ohlcv(symbol, timeframe=timeframe, since=cursor, limit=page_limit)
-        except Exception:
+        except Exception as e:
+            print(f"⚠️ 获取数据出错 (第{safety}次): {str(e)[:100]}")
             break
         if not chunk:
             break
+        
         all_rows.extend(chunk)
         # 推进游标到最后一根之后，避免重复
         cursor = chunk[-1][0] + 1
@@ -69,6 +73,8 @@ def fetch_since_paginated(exchange: ccxt.Exchange, symbol: str, timeframe: str, 
         # 简单的停止条件：如果返回的数量少于page_limit，认为到尾部
         if len(chunk) < page_limit:
             break
+    
+    print(f"   分页获取完成: {safety} 次迭代，共 {len(all_rows)} 条原始数据")
 
     if not all_rows:
         return pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
@@ -83,37 +89,62 @@ def fetch_since_paginated(exchange: ccxt.Exchange, symbol: str, timeframe: str, 
     return df
 
 
-def run_backtest(days: int = 2, interval: str = '15m', strategy_version: str = 'strategy_decision_v2') -> Dict[str, Any]:
+def run_backtest(days: int = 2, interval: str = '15m', strategy_version: str = 'strategy_decision_v2', end_time: str = None) -> Dict[str, Any]:
     """
     运行回测。
     Args:
-        days: 回测天数 (默认 2 天)
+        days: 回测天数 (默认 2 天，最多支持 300 天)
         interval: K线级别 (默认 15m)
         strategy_version: 策略版本 (默认 strategy_decision_v2)
+        end_time: 回测截至时间 (格式: 'YYYY-MM-DD HH:MM:SS'，默认为当前时间)
     Returns:
         dict: { labels, prices, decisions, trades, equity_curve, summary }
+        注意：当回测天数超过20天时，返回数据仅包含最近20天，但统计数据基于完整回测结果
     """
+    # 限制最大回测天数为300天
+    days = min(days, 300)
     symbol = TRADE_CONFIG['symbol']
     # 计算两天所需根数
     minutes = interval_to_minutes(interval)
     per_day = int(24 * 60 / minutes)
     expected_candles = days * per_day
 
-    # 以北京时间为参考计算since，再转换为UTC毫秒
-    now_sh = pd.Timestamp.now(tz='Asia/Shanghai')
-    since_sh = now_sh - timedelta(days=days)
+    # 解析截至时间，默认为当前时间
+    if end_time:
+        try:
+            end_timestamp = pd.Timestamp(end_time, tz='Asia/Shanghai')
+        except Exception as e:
+            print(f"⚠️ 截至时间解析失败: {e}，使用当前时间")
+            end_timestamp = pd.Timestamp.now(tz='Asia/Shanghai')
+    else:
+        end_timestamp = pd.Timestamp.now(tz='Asia/Shanghai')
+    
+    # 计算起始时间
+    since_sh = end_timestamp - timedelta(days=days)
     since_utc = since_sh.tz_convert('UTC')
     since_ms = int(since_utc.timestamp() * 1000)
+    end_utc = end_timestamp.tz_convert('UTC')
+    end_ms = int(end_utc.timestamp() * 1000)
 
-    # 优先分页抓取，确保覆盖完整两天区间
-    df = fetch_since_paginated(exchange, symbol, interval, since_ms=since_ms, max_candles=expected_candles + 50)
-    if df.empty or len(df) < expected_candles:
-        # 退化为按数量抓取最近N根，至少提供可用数据
-        df = fetch_recent(exchange, symbol, interval, limit=expected_candles + 50)
-
-    # 保留最后 expected_candles 根，确保最新两天
-    if not df.empty and len(df) > expected_candles:
-        df = df.iloc[-expected_candles:]
+    # 优先分页抓取，确保覆盖完整时间区间
+    # 注意：OKX等交易所单次抓取有限制，采用分页方式，max_candles设置为需求的1.5倍，增加安全边界
+    df = fetch_since_paginated(exchange, symbol, interval, since_ms=since_ms, max_candles=int(expected_candles * 1.5), page_limit=300)
+    
+    # 过滤掉截至时间之后的数据
+    # 注意：DataFrame中的timestamp是naive datetime（无时区），需要转换为相同类型才能比较
+    if not df.empty:
+        # 将带时区的end_timestamp转换为naive datetime以匹配DataFrame
+        end_timestamp_naive = end_timestamp.tz_localize(None)
+        df = df[df['timestamp'] <= end_timestamp_naive]
+    
+    # 调试信息：显示实际获取的数据情况
+    print(f"📥 数据获取: 期望 {expected_candles} 根K线，实际获取 {len(df)} 根")
+    print(f"   回测时间范围: {since_sh.strftime('%Y-%m-%d %H:%M:%S')} 至 {end_timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+    if not df.empty:
+        print(f"   实际数据范围: {df['timestamp'].iloc[0]} 至 {df['timestamp'].iloc[-1]}")
+    
+    # 如果分页获取失败或数据严重不足，不要退化到fetch_recent（它只能获取最近数据）
+    # 而是直接使用已获取的数据进行回测
     if df.empty:
         return { 'error': '无法获取历史数据' }
 
@@ -124,7 +155,20 @@ def run_backtest(days: int = 2, interval: str = '15m', strategy_version: str = '
     strategy = StrategyInterface(deepseek_client, strategy_version=strategy_version)
 
     labels_full = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M').tolist()
-    labels_hm = df['timestamp'].dt.strftime('%H:%M').tolist()
+    
+    # 智能格式化时间标签：如果数据跨越多天，显示"月-日 时:分"，否则只显示"时:分"
+    if len(df) > 0:
+        first_date = df['timestamp'].iloc[0].date()
+        last_date = df['timestamp'].iloc[-1].date()
+        if first_date != last_date:
+            # 跨天数据：显示 "月-日 时:分"
+            labels_hm = df['timestamp'].dt.strftime('%m-%d %H:%M').tolist()
+        else:
+            # 单天数据：只显示 "时:分"
+            labels_hm = df['timestamp'].dt.strftime('%H:%M').tolist()
+    else:
+        labels_hm = []
+    
     prices = df['close'].tolist()
     decisions = []  # 1 buy, -1 sell, 0 hold
     trades = []     # 每次信号记录
@@ -340,6 +384,7 @@ def run_backtest(days: int = 2, interval: str = '15m', strategy_version: str = '
     summary = {
         'days': days,
         'interval': interval,
+        'end_time': end_timestamp.strftime('%Y-%m-%d %H:%M:%S'),
         'data_points': len(df),
         'total_signals': total_trades,
         'closed_trades': closed_trades,
@@ -393,9 +438,80 @@ def run_backtest(days: int = 2, interval: str = '15m', strategy_version: str = '
     klines_df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']].copy()
     klines_df['timestamp'] = klines_df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
 
-    chart = {
-        'klines': klines_df.to_dict('records'),
-        'indicators': {
+    # 数据截取逻辑：当回测天数超过20天时，仅返回最近20天的图表数据
+    display_days = 20
+    should_truncate = days > display_days
+    
+    if should_truncate:
+        # 使用时间戳来精确计算截断位置
+        last_timestamp = df['timestamp'].iloc[-1]
+        truncate_time = last_timestamp - timedelta(days=display_days)
+        
+        # 调试信息
+        print(f"🔍 截断调试信息：")
+        print(f"   数据范围: {df['timestamp'].iloc[0]} 至 {last_timestamp}")
+        print(f"   总数据点: {len(df)}")
+        print(f"   截断时间点: {truncate_time}")
+        
+        # 直接找到截断位置（使用整数位置索引）
+        truncate_start_pos = 0
+        for idx in range(len(df)):
+            if df['timestamp'].iloc[idx] >= truncate_time:
+                truncate_start_pos = idx
+                break
+        
+        print(f"   截断位置索引: {truncate_start_pos}")
+        print(f"   截断后起始时间: {df['timestamp'].iloc[truncate_start_pos]}")
+        print(f"   返回数据点数: {len(df) - truncate_start_pos}")
+        
+        actual_display_days = (last_timestamp - df['timestamp'].iloc[truncate_start_pos]).days
+        truncate_timestamp = df['timestamp'].iloc[truncate_start_pos]
+        
+        # 截取最近20天的数据用于返回（使用位置切片）
+        labels_display = labels_full[truncate_start_pos:]
+        labels_hm_display = labels_hm[truncate_start_pos:]
+        prices_display = prices[truncate_start_pos:]
+        decisions_display = decisions[truncate_start_pos:]
+        equity_curve_display = equity_curve[truncate_start_pos:]
+        klines_display = klines_df.iloc[truncate_start_pos:].to_dict('records')
+        
+        # 技术指标也截取
+        indicators_display = {
+            'sma5': df['sma_5'].fillna(0).tolist()[truncate_start_pos:],
+            'sma20': df['sma_20'].fillna(0).tolist()[truncate_start_pos:],
+            'sma50': df['sma_50'].fillna(0).tolist()[truncate_start_pos:],
+            'ema12': df['ema_12'].fillna(0).tolist()[truncate_start_pos:],
+            'ema26': df['ema_26'].fillna(0).tolist()[truncate_start_pos:],
+            'macd': df['macd'].fillna(0).tolist()[truncate_start_pos:],
+            'macd_signal': df['macd_signal'].fillna(0).tolist()[truncate_start_pos:],
+            'macd_histogram': df['macd_histogram'].fillna(0).tolist()[truncate_start_pos:],
+            'rsi': df['rsi'].fillna(50).tolist()[truncate_start_pos:],
+            'bb_upper': df['bb_upper'].bfill().ffill().tolist()[truncate_start_pos:],
+            'bb_middle': df['bb_middle'].bfill().ffill().tolist()[truncate_start_pos:],
+            'bb_lower': df['bb_lower'].bfill().ffill().tolist()[truncate_start_pos:],
+            'scores': (df['score'].fillna(0).tolist()[truncate_start_pos:] if 'score' in df.columns else [0]*len(labels_display)),
+            'decisions': decisions_display
+        }
+        
+        # 筛选最近20天内发生的交易
+        trades_display = [
+            t for t in trades 
+            if pd.to_datetime(t['timestamp']) >= truncate_timestamp
+        ]
+        
+        print(f"📊 回测完成：完整回测 {days} 天（{df['timestamp'].iloc[0].strftime('%Y-%m-%d')} 至 {last_timestamp.strftime('%Y-%m-%d')}），"
+              f"返回最近 ~{actual_display_days} 天数据（{truncate_timestamp.strftime('%Y-%m-%d %H:%M')} 开始，共 {len(labels_display)} 个数据点，{len(trades_display)}/{len(trades)} 笔交易）")
+    else:
+        # 不截取，返回完整数据
+        labels_display = labels_full
+        labels_hm_display = labels_hm
+        prices_display = prices
+        decisions_display = decisions
+        equity_curve_display = equity_curve
+        klines_display = klines_df.to_dict('records')
+        trades_display = trades
+        
+        indicators_display = {
             'sma5': df['sma_5'].fillna(0).tolist(),
             'sma20': df['sma_20'].fillna(0).tolist(),
             'sma50': df['sma_50'].fillna(0).tolist(),
@@ -410,16 +526,20 @@ def run_backtest(days: int = 2, interval: str = '15m', strategy_version: str = '
             'bb_lower': df['bb_lower'].bfill().ffill().tolist(),
             'scores': (df['score'].fillna(0).tolist() if 'score' in df.columns else [0]*len(df)),
             'decisions': decisions
-        },
-        'labels': labels_hm
+        }
+
+    chart = {
+        'klines': klines_display,
+        'indicators': indicators_display,
+        'labels': labels_hm_display
     }
 
     return {
-        'labels': labels_full,
-        'prices': prices,
-        'decisions': decisions,
-        'equity_curve': equity_curve,
-        'trades': trades,
+        'labels': labels_display,
+        'prices': prices_display,
+        'decisions': decisions_display,
+        'equity_curve': equity_curve_display,
+        'trades': trades_display,
         'summary': summary,
         'chart': chart
     }

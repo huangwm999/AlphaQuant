@@ -239,8 +239,12 @@ def get_technical_chart_data():
                     'decisions': decision_signals
                 },
                 
-                # 时间标签
-                'labels': [ts.strftime('%H:%M') for ts in df['timestamp']],
+                # 智能格式化时间标签：如果数据跨越多天，显示"月-日 时:分"，否则只显示"时:分"
+                'labels': (
+                    [ts.strftime('%m-%d %H:%M') for ts in df['timestamp']]
+                    if len(df) > 0 and df['timestamp'].iloc[0].date() != df['timestamp'].iloc[-1].date()
+                    else [ts.strftime('%H:%M') for ts in df['timestamp']]
+                ),
                 
                 # 当前数据
                 'current': {
@@ -269,17 +273,20 @@ def get_technical_chart_data():
 
 @app.route('/api/backtest', methods=['POST'])
 def run_backtest_api():
-    """回测接口：默认回测最近2天，15分钟级别。可选传参 days, interval, strategy_version。"""
+    """回测接口：默认回测最近2天，15分钟级别。
+    可选传参: days (最多300天), interval, strategy_version, end_time (截至时间)。
+    当回测天数超过20天时，返回数据仅包含最近20天，但统计基于完整回测。"""
     try:
         # 延迟导入，避免循环依赖
         from backtest import run_backtest
 
         data = request.get_json(silent=True) or {}
-        days = int(data.get('days', 2))
+        days = min(int(data.get('days', 2)), 300)  # 限制最大300天
         interval = data.get('interval', '15m')
         strategy_version = data.get('strategy_version', 'strategy_decision_v2')
+        end_time = data.get('end_time')  # 截至时间，格式: 'YYYY-MM-DD HH:MM:SS'
 
-        result = run_backtest(days=days, interval=interval, strategy_version=strategy_version)
+        result = run_backtest(days=days, interval=interval, strategy_version=strategy_version, end_time=end_time)
         if 'error' in result:
             return jsonify(result), 500
         return jsonify(result)
