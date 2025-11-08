@@ -60,11 +60,22 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
     trades = []     # 每次信号记录
     equity_curve = []
 
-    position_open = False
+    # 交易参数
+    fee_rate = 0.0005  # 0.05%
+    fixed_usd = 100.0
+    first_price = float(df['close'].iloc[0])
+    fixed_qty = fixed_usd / first_price  # 固定BTC数量（根据首根K线价格确定）
+
+    # 仓位状态
+    position_side = None  # None / 'long' / 'short'
     entry_price = 0.0
+    entry_fee = 0.0
     cumulative_pnl = 0.0
     win_trades = 0
     closed_trades = 0
+
+    def order_fee(price: float, qty: float) -> float:
+        return price * qty * fee_rate
 
     # 回测逐根
     for i in range(len(df)):
@@ -84,41 +95,147 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
 
         action_flag = 0
         reason = signal_data.get('reason', '')
-    ts = labels_full[i]
+        ts = labels_full[i]
         current_price = price_data['price']
 
-        if signal == 'BUY' and not position_open:
-            position_open = True
-            entry_price = current_price
+        if signal == 'BUY':
             action_flag = 1
-            trades.append({
-                'timestamp': ts,
-                'signal': 'BUY',
-                'price': current_price,
-                'pnl': None,
-                'reason': reason
-            })
-        elif signal == 'SELL' and position_open:
-            # 平仓
-            pnl = current_price - entry_price
-            cumulative_pnl += pnl
-            position_open = False
+            if position_side is None:
+                # 开多
+                entry_price = current_price
+                entry_fee = order_fee(current_price, fixed_qty)
+                position_side = 'long'
+                trades.append({
+                    'timestamp': ts,
+                    'action': 'OPEN_LONG',
+                    'qty': round(fixed_qty, 6),
+                    'entry_price': round(entry_price, 2),
+                    'fee_entry': round(entry_fee, 4),
+                    'pnl': None,
+                    'reason': reason
+                })
+            elif position_side == 'short':
+                # 先平空
+                exit_fee = order_fee(current_price, fixed_qty)
+                pnl_gross = (entry_price - current_price) * fixed_qty
+                pnl_net = pnl_gross - (entry_fee + exit_fee)
+                cumulative_pnl += pnl_net
+                closed_trades += 1
+                if pnl_net > 0:
+                    win_trades += 1
+                trades.append({
+                    'timestamp': ts,
+                    'action': 'CLOSE_SHORT',
+                    'qty': round(fixed_qty, 6),
+                    'entry_price': round(entry_price, 2),
+                    'close_price': round(current_price, 2),
+                    'fee_entry': round(entry_fee, 4),
+                    'fee_exit': round(exit_fee, 4),
+                    'pnl': round(pnl_net, 2),
+                    'reason': reason
+                })
+                # 再开多
+                entry_price = current_price
+                entry_fee = order_fee(current_price, fixed_qty)
+                position_side = 'long'
+                trades.append({
+                    'timestamp': ts,
+                    'action': 'OPEN_LONG',
+                    'qty': round(fixed_qty, 6),
+                    'entry_price': round(entry_price, 2),
+                    'fee_entry': round(entry_fee, 4),
+                    'pnl': None,
+                    'reason': reason
+                })
+            else:
+                # 已经是long，忽略重复开仓
+                pass
+        elif signal == 'SELL':
             action_flag = -1
-            closed_trades += 1
-            if pnl > 0:
-                win_trades += 1
-            trades.append({
-                'timestamp': ts,
-                'signal': 'SELL',
-                'price': current_price,
-                'pnl': round(pnl, 2),
-                'reason': reason
-            })
+            if position_side is None:
+                # 开空
+                entry_price = current_price
+                entry_fee = order_fee(current_price, fixed_qty)
+                position_side = 'short'
+                trades.append({
+                    'timestamp': ts,
+                    'action': 'OPEN_SHORT',
+                    'qty': round(fixed_qty, 6),
+                    'entry_price': round(entry_price, 2),
+                    'fee_entry': round(entry_fee, 4),
+                    'pnl': None,
+                    'reason': reason
+                })
+            elif position_side == 'long':
+                # 先平多
+                exit_fee = order_fee(current_price, fixed_qty)
+                pnl_gross = (current_price - entry_price) * fixed_qty
+                pnl_net = pnl_gross - (entry_fee + exit_fee)
+                cumulative_pnl += pnl_net
+                closed_trades += 1
+                if pnl_net > 0:
+                    win_trades += 1
+                trades.append({
+                    'timestamp': ts,
+                    'action': 'CLOSE_LONG',
+                    'qty': round(fixed_qty, 6),
+                    'entry_price': round(entry_price, 2),
+                    'close_price': round(current_price, 2),
+                    'fee_entry': round(entry_fee, 4),
+                    'fee_exit': round(exit_fee, 4),
+                    'pnl': round(pnl_net, 2),
+                    'reason': reason
+                })
+                # 再开空
+                entry_price = current_price
+                entry_fee = order_fee(current_price, fixed_qty)
+                position_side = 'short'
+                trades.append({
+                    'timestamp': ts,
+                    'action': 'OPEN_SHORT',
+                    'qty': round(fixed_qty, 6),
+                    'entry_price': round(entry_price, 2),
+                    'fee_entry': round(entry_fee, 4),
+                    'pnl': None,
+                    'reason': reason
+                })
+            else:
+                # 已经是short，忽略重复开仓
+                pass
         else:
             action_flag = 0
 
         decisions.append(action_flag)
         equity_curve.append(round(cumulative_pnl, 2))
+
+    # 收尾：最后一根后如果还有持仓，按最后价格平仓
+    if position_side is not None:
+        last_price = float(df['close'].iloc[-1])
+        ts_last = labels_full[-1]
+        exit_fee = order_fee(last_price, fixed_qty)
+        if position_side == 'long':
+            pnl_gross = (last_price - entry_price) * fixed_qty
+            close_action = 'CLOSE_LONG'
+        else:
+            pnl_gross = (entry_price - last_price) * fixed_qty
+            close_action = 'CLOSE_SHORT'
+        pnl_net = pnl_gross - (entry_fee + exit_fee)
+        cumulative_pnl += pnl_net
+        closed_trades += 1
+        if pnl_net > 0:
+            win_trades += 1
+        trades.append({
+            'timestamp': ts_last,
+            'action': close_action,
+            'qty': round(fixed_qty, 6),
+            'entry_price': round(entry_price, 2),
+            'close_price': round(last_price, 2),
+            'fee_entry': round(entry_fee, 4),
+            'fee_exit': round(exit_fee, 4),
+            'pnl': round(pnl_net, 2),
+            'reason': 'FINAL_CLOSE'
+        })
+        position_side = None
 
     total_trades = len(trades)
     win_rate = (win_trades / closed_trades * 100) if closed_trades > 0 else 0.0
