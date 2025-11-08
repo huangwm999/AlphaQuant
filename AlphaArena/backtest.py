@@ -70,7 +70,9 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
     position_side = None  # None / 'long' / 'short'
     entry_price = 0.0
     entry_fee = 0.0
-    cumulative_pnl = 0.0
+    cumulative_pnl = 0.0          # 净盈亏 (扣除手续费)
+    gross_pnl_total = 0.0         # 毛盈亏 (未扣手续费)
+    total_fees = 0.0              # 手续费累计
     win_trades = 0
     closed_trades = 0
 
@@ -104,6 +106,7 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
                 # 开多
                 entry_price = current_price
                 entry_fee = order_fee(current_price, fixed_qty)
+                total_fees += entry_fee
                 position_side = 'long'
                 trades.append({
                     'timestamp': ts,
@@ -118,8 +121,10 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
                 action_flag = 1  # 方向翻转：空 -> 多，记为 BUY
                 # 先平空
                 exit_fee = order_fee(current_price, fixed_qty)
+                total_fees += exit_fee
                 pnl_gross = (entry_price - current_price) * fixed_qty
                 pnl_net = pnl_gross - (entry_fee + exit_fee)
+                gross_pnl_total += pnl_gross
                 cumulative_pnl += pnl_net
                 closed_trades += 1
                 if pnl_net > 0:
@@ -138,6 +143,7 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
                 # 再开多
                 entry_price = current_price
                 entry_fee = order_fee(current_price, fixed_qty)
+                total_fees += entry_fee
                 position_side = 'long'
                 trades.append({
                     'timestamp': ts,
@@ -157,6 +163,7 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
                 # 开空
                 entry_price = current_price
                 entry_fee = order_fee(current_price, fixed_qty)
+                total_fees += entry_fee
                 position_side = 'short'
                 trades.append({
                     'timestamp': ts,
@@ -171,8 +178,10 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
                 action_flag = -1  # 方向翻转：多 -> 空，记为 SELL
                 # 先平多
                 exit_fee = order_fee(current_price, fixed_qty)
+                total_fees += exit_fee
                 pnl_gross = (current_price - entry_price) * fixed_qty
                 pnl_net = pnl_gross - (entry_fee + exit_fee)
+                gross_pnl_total += pnl_gross
                 cumulative_pnl += pnl_net
                 closed_trades += 1
                 if pnl_net > 0:
@@ -191,6 +200,7 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
                 # 再开空
                 entry_price = current_price
                 entry_fee = order_fee(current_price, fixed_qty)
+                total_fees += entry_fee
                 position_side = 'short'
                 trades.append({
                     'timestamp': ts,
@@ -215,6 +225,7 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
         last_price = float(df['close'].iloc[-1])
         ts_last = labels_full[-1]
         exit_fee = order_fee(last_price, fixed_qty)
+        total_fees += exit_fee
         if position_side == 'long':
             pnl_gross = (last_price - entry_price) * fixed_qty
             close_action = 'CLOSE_LONG'
@@ -222,6 +233,7 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
             pnl_gross = (entry_price - last_price) * fixed_qty
             close_action = 'CLOSE_SHORT'
         pnl_net = pnl_gross - (entry_fee + exit_fee)
+        gross_pnl_total += pnl_gross
         cumulative_pnl += pnl_net
         closed_trades += 1
         if pnl_net > 0:
@@ -241,7 +253,8 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
 
     total_trades = len(trades)
     win_rate = (win_trades / closed_trades * 100) if closed_trades > 0 else 0.0
-    avg_pnl = (cumulative_pnl / closed_trades) if closed_trades > 0 else 0.0
+    avg_pnl_net = (cumulative_pnl / closed_trades) if closed_trades > 0 else 0.0
+    avg_pnl_gross = (gross_pnl_total / closed_trades) if closed_trades > 0 else 0.0
 
     summary = {
         'days': days,
@@ -250,8 +263,11 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
         'total_signals': total_trades,
         'closed_trades': closed_trades,
         'win_rate': round(win_rate, 2),
-        'total_pnl': round(cumulative_pnl, 2),
-        'avg_pnl_per_trade': round(avg_pnl, 2)
+        'gross_pnl_total': round(gross_pnl_total, 2),
+        'total_fees': round(total_fees, 2),
+        'net_pnl_total': round(cumulative_pnl, 2),
+        'avg_pnl_gross': round(avg_pnl_gross, 2),
+        'avg_pnl_net': round(avg_pnl_net, 2)
     }
 
     # 计算 scores 以与技术图保持一致（使用当前情绪）
