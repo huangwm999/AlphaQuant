@@ -21,11 +21,30 @@ from deepseekok3 import exchange, TRADE_CONFIG, deepseek_client
 
 
 def fetch_historical(exchange: ccxt.Exchange, symbol: str, timeframe: str, since: int, limit: int = 1000):
-    """安全获取K线数据，自动截断"""
+    """按since获取K线（UTC毫秒），并转换为上海时区"""
     ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=limit)
     df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms').dt.tz_localize('UTC').dt.tz_convert('Asia/Shanghai').dt.tz_localize(None)
     return df
+
+def fetch_recent(exchange: ccxt.Exchange, symbol: str, timeframe: str, limit: int):
+    """按数量获取最近N根K线（与技术指标分析一致），并转换为上海时区"""
+    ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+    df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms').dt.tz_localize('UTC').dt.tz_convert('Asia/Shanghai').dt.tz_localize(None)
+    return df
+
+def interval_to_minutes(interval: str) -> int:
+    """将'3m','15m','1h','4h','1d'等周期转换为分钟数"""
+    interval = interval.strip().lower()
+    if interval.endswith('m'):
+        return int(interval[:-1])
+    if interval.endswith('h'):
+        return int(interval[:-1]) * 60
+    if interval.endswith('d'):
+        return int(interval[:-1]) * 60 * 24
+    # 默认按分钟处理
+    return max(int(''.join(ch for ch in interval if ch.isdigit()) or '3'), 1)
 
 
 def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
@@ -38,12 +57,12 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
         dict: { labels, prices, decisions, trades, equity_curve, summary }
     """
     symbol = TRADE_CONFIG['symbol']
-    end_ts = datetime.utcnow()
-    start_ts = end_ts - timedelta(days=days)
-    since_ms = int(start_ts.timestamp() * 1000)
-    candles_needed = int(days * 24 * 60 / 3) + 10  # +10 余量
+    # 与技术指标分析对齐：直接按数量取最近N根，而不是用since
+    minutes = interval_to_minutes(interval)
+    per_day = int(24 * 60 / minutes)
+    candles_needed = days * per_day + 10  # +10 余量
 
-    df = fetch_historical(exchange, symbol, interval, since=since_ms, limit=candles_needed)
+    df = fetch_recent(exchange, symbol, interval, limit=candles_needed)
     if df.empty:
         return { 'error': '无法获取历史数据' }
 
@@ -267,7 +286,10 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
         'total_fees': round(total_fees, 2),
         'net_pnl_total': round(cumulative_pnl, 2),
         'avg_pnl_gross': round(avg_pnl_gross, 2),
-        'avg_pnl_net': round(avg_pnl_net, 2)
+        'avg_pnl_net': round(avg_pnl_net, 2),
+        # 兼容旧字段名（用于前端已存在的显示逻辑）
+        'total_pnl': round(cumulative_pnl, 2),
+        'avg_pnl_per_trade': round(avg_pnl_net, 2)
     }
 
     # 计算 scores 以与技术图保持一致（使用当前情绪）
