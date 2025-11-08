@@ -80,8 +80,9 @@ window.initTechnicalChart = (data, selectedIndicators = [], chartId = 'technical
     // 计算横向滚动所需的容器宽度（每根K线给定像素宽度）
     const scrollEl = document.getElementById(`${chartId}-scroll`);
     const innerEl = document.getElementById(`${chartId}-inner`);
-    if (scrollEl && innerEl) {
-        const pxPerBar = 10; // 每个数据点的最小像素宽度
+    // 仅为存在滚动容器的回测图设置动态宽度（技术指标分析已还原不滚动）
+    if (scrollEl && innerEl && chartId === 'backtestTechnicalChart') {
+        const pxPerBar = 20; // 提高每个数据点像素宽度，扩大实际图表可视宽度
         const labelsCount = Array.isArray(data.labels) ? data.labels.length : (data.klines ? data.klines.length : 0);
         const minWidth = scrollEl.clientWidth || 600;
         const targetWidth = Math.max(minWidth, labelsCount * pxPerBar);

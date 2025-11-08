@@ -273,11 +273,9 @@
                                         '交易决策'
                                     )
                                 ),
-                                // 图表区域（支持横向滚动）
-                                h('div', { id: 'technicalChart-scroll', style: { height: '280px', padding: '10px', overflowX: 'auto' } },
-                                    h('div', { id: 'technicalChart-inner', style: { minWidth: '100%' } },
-                                        h('canvas', { id: 'technicalChart' })
-                                    )
+                                // 图表区域（还原为无横向滚动）
+                                h('div', { style: { height: '280px', padding: '10px' } },
+                                    h('canvas', { id: 'technicalChart' })
                                 )
                             )
                         )
@@ -331,7 +329,7 @@
                                         h('input', { type: 'checkbox', defaultChecked: true, onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'decisions' }), '交易决策'
                                     )
                                 ),
-                                // 图表区域（与上方一致，支持横向滚动）
+                                // 图表区域（恢复原始高度，保留横向滚动）
                                 h('div', { id: 'backtestTechnicalChart-scroll', style: { height: '280px', padding: '10px', overflowX: 'auto' } },
                                     h('div', { id: 'backtestTechnicalChart-inner', style: { minWidth: '100%' } },
                                         h('canvas', { id: 'backtestTechnicalChart' })
