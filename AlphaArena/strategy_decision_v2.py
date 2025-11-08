@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-策略决策模块 V2 - 基于MACD柱状图V型/倒V型转折
+策略决策模块 V2 - 基于MACD Signal线V型/倒V型转折
 这是一个不依赖LLM的、纯粹基于技术指标的策略。
 """
 
@@ -10,11 +10,11 @@ from datetime import datetime
 
 class StrategyAnalyzer:
     """
-    策略分析器类 V2 - 基于MACD柱状图的V型/倒V型转折。
+    策略分析器类 V2 - 基于MACD Signal线的V型/倒V型转折。
 
     决策逻辑:
-    - 买入信号 (BUY): MACD柱状图形成V型底部（谷），即趋势由跌转涨，且谷点最好在0轴以下。
-    - 卖出信号 (SELL): MACD柱状图形成倒V型顶部（峰），即趋势由涨转跌，且峰点最好在0轴以上。
+    - 买入信号 (BUY): MACD Signal线形成V型底部（谷），即 P-3 > P-2 < P-1，且谷点最好在0轴以下。
+    - 卖出信号 (SELL): MACD Signal线形成倒V型顶部（峰），即 P-3 < P-2 > P-1，且峰点最好在0轴以上。
     - 持有信号 (HOLD): 其他所有情况。
     """
     
@@ -42,25 +42,27 @@ class StrategyAnalyzer:
         """
         try:
             df = price_data.get('full_data')
-            if df is None or len(df) < 3:
-                return self._create_signal('HOLD', 'LOW', 'K线数据不足')
+            if df is None or len(df) < 4:
+                return self._create_signal('HOLD', 'LOW', 'K线数据不足（需要至少4根K线）')
 
-            # 获取最近三个周期的MACD柱状图值
-            hist_current = df['macd_histogram'].iloc[-1]
-            hist_prev = df['macd_histogram'].iloc[-2]
-            hist_prev_2 = df['macd_histogram'].iloc[-3]
+            # 获取最近四个周期的MACD Signal线值
+            # 检查P-3, P-2, P-1是否形成V/倒V型，在当前P-0时刻触发信号
+            signal_prev_3 = df['macd_signal'].iloc[-4]  # P-3 (i-3)
+            signal_prev_2 = df['macd_signal'].iloc[-3]  # P-2 (i-2) <- V型的谷底或倒V的峰顶
+            signal_prev_1 = df['macd_signal'].iloc[-2]  # P-1 (i-1)
+            signal_current = df['macd_signal'].iloc[-1]  # P-0 (当前, i) <- 此时触发信号
 
             current_price = price_data['price']
-            reason = f"MACD柱状图趋势: P-2={hist_prev_2:.4f}, P-1={hist_prev:.4f}, P-0={hist_current:.4f}."
+            reason = f"MACD Signal线趋势: P-3={signal_prev_3:.4f}, P-2={signal_prev_2:.4f}, P-1={signal_prev_1:.4f}, P-0={signal_current:.4f}."
 
-            # V型反转（买入信号）: P-2 > P-1 < P-0 且 P-1 < 0（谷底在0轴下方更佳）
-            if hist_prev_2 > hist_prev and hist_prev < hist_current and hist_prev < 0:
-                reason += " MACD柱状图形成V型底部，看涨。"
+            # V型反转（买入信号）: P-3 > P-2 < P-1 且 P-2 < 0（谷底在0轴下方更佳）
+            if signal_prev_3 > signal_prev_2 and signal_prev_2 < signal_prev_1 and signal_prev_2 < 0:
+                reason += " MACD Signal线形成V型底部，看涨。"
                 return self._create_signal('BUY', 'HIGH', reason, current_price)
 
-            # 倒V型反转（卖出信号）: P-2 < P-1 > P-0 且 P-1 > 0（峰顶在0轴上方更佳）
-            elif hist_prev_2 < hist_prev and hist_prev > hist_current and hist_prev > 0:
-                reason += " MACD柱状图形成倒V型顶部，看跌。"
+            # 倒V型反转（卖出信号）: P-3 < P-2 > P-1 且 P-2 > 0（峰顶在0轴上方更佳）
+            elif signal_prev_3 < signal_prev_2 and signal_prev_2 > signal_prev_1 and signal_prev_2 > 0:
+                reason += " MACD Signal线形成倒V型顶部，看跌。"
                 return self._create_signal('SELL', 'HIGH', reason, current_price)
             
             # 其他情况，持有

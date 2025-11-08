@@ -31,7 +31,7 @@ class StrategyInterface:
         """
         分析市场策略的外部接口。
         
-    此方法将参数传递给当前策略实现（v2）。
+        此方法将参数传递给当前策略实现（v2）。
         """
         return self._strategy_analyzer.analyze_market_strategy(
             price_data=price_data,

@@ -148,8 +148,17 @@ def run_backtest(days: int = 2, interval: str = '15m') -> Dict[str, Any]:
     def order_fee(price: float, qty: float) -> float:
         return price * qty * fee_rate
 
+    # 计算第1天结束的索引位置（作为预热期）
+    warmup_candles = per_day  # 第1天的K线数量
+    
     # 回测逐根
     for i in range(len(df)):
+        # 第1天作为预热期，不进行交易判断
+        if i < warmup_candles:
+            decisions.append(0)
+            equity_curve.append(cumulative_pnl)
+            continue
+        
         # 至少要有3根柱状图才能生成MACD转折判定
         if i < 3:
             decisions.append(0)
@@ -167,6 +176,7 @@ def run_backtest(days: int = 2, interval: str = '15m') -> Dict[str, Any]:
         action_flag = 0
         reason = signal_data.get('reason', '')
         ts = labels_full[i]
+        signal_ts = labels_full[i-1]  # V型实际形成位置（P-1时刻）
         current_price = price_data['price']
 
         if signal == 'BUY':
@@ -178,7 +188,8 @@ def run_backtest(days: int = 2, interval: str = '15m') -> Dict[str, Any]:
                 total_fees += entry_fee
                 position_side = 'long'
                 trades.append({
-                    'timestamp': ts,
+                    'timestamp': signal_ts,  # 使用V型实际位置的时间戳
+                    'execution_time': ts,    # 实际执行时间
                     'action': 'OPEN_LONG',
                     'qty': round(fixed_qty, 6),
                     'entry_price': round(entry_price, 2),

@@ -494,20 +494,27 @@ def trading_bot():
 
     # 7. 更新系统状态到Web界面
     try:
-        system_status = {
-            'last_update': datetime.now().isoformat(),
-            'btc_price': price_data['price'],
-            'price_change': price_data['price_change'],
-            'account_balance': account_info['balance'] if account_info else 0,
-            'account_equity': account_info['equity'] if account_info else 0,
-            'has_position': current_position is not None,
-            'position_side': current_position['side'] if current_position else None,
-            'position_size': current_position['size'] if current_position else 0,
-            'last_signal': signal_data['signal'] if signal_data else 'NONE',
-            'signal_confidence': signal_data['confidence'] if signal_data else 'NONE',
-            'is_running': True
+        # 构造符合 data_manager.py 期望的数据结构
+        btc_info_data = {
+            'price': price_data['price'],
+            'change': price_data['price_change']
         }
-        update_system_status(system_status)
+        
+        ai_signal_data = {
+            'signal': signal_data['signal'] if signal_data else 'NONE',
+            'confidence': signal_data['confidence'] if signal_data else 'NONE',
+            'reason': signal_data.get('reason', '') if signal_data else ''
+        }
+        
+        # 调用正确的更新函数，传递5个参数
+        update_system_status(
+            status='running',
+            account_info=account_info,
+            btc_info=btc_info_data,
+            position=position_info,
+            ai_signal=ai_signal_data
+        )
+        print("✅ 系统状态已更新")
     except Exception as e:
         print(f"更新系统状态失败: {e}")
 
