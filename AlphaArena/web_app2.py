@@ -189,9 +189,9 @@ def get_technical_chart_data():
                     'macd_signal': df['macd_signal'].fillna(0).tolist(),
                     'macd_histogram': df['macd_histogram'].fillna(0).tolist(),
                     'rsi': df['rsi'].fillna(50).tolist(),
-                    'bb_upper': df['bb_upper'].fillna(0).tolist(),
-                    'bb_middle': df['bb_middle'].fillna(0).tolist(),
-                    'bb_lower': df['bb_lower'].fillna(0).tolist(),
+                    'bb_upper': df['bb_upper'].bfill().ffill().tolist(),
+                    'bb_middle': df['bb_middle'].bfill().ffill().tolist(), 
+                    'bb_lower': df['bb_lower'].bfill().ffill().tolist(),
                     'scores': df['score'].fillna(0).tolist(),
                     'decisions': decision_signals
                 },
