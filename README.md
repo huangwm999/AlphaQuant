@@ -28,6 +28,10 @@
 #### 主要功能界面
 ![系统介绍1](Document/introduce1.png)
 
+
+#### 回测评估分析界面
+![系统介绍1](Document/introduce3.png)
+
 #### 详细数据分析界面  
 ![系统介绍2](Document/introduce2.png)
 
