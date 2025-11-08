@@ -83,9 +83,11 @@
                     const result = await res.json();
                     if (!res.ok) throw new Error(result.error || '回测失败');
                     setBacktest({ loading: false, data: result, error: null });
-                    // 渲染回测图表
+                    // 渲染回测技术图（与技术指标分析一致）
                     setTimeout(() => {
-                        window.initBacktestCharts && window.initBacktestCharts(result);
+                        const cbs = document.querySelectorAll('input[data-indicator-bt]');
+                        const selected = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt);
+                        window.initTechnicalChart && window.initTechnicalChart(result.chart, selected, 'backtestTechnicalChart');
                     }, 50);
                     message.success('回测完成');
                 } catch (err) {
@@ -279,7 +281,7 @@
                         )
                     ),
 
-                    // 回测视图
+                    // 回测视图（技术指标图结构完全一致）
                     h(Row, { gutter: [16, 16], style: { marginBottom: 16 } },
                         h(Col, { xs: 24 },
                             h(Card, { 
@@ -290,19 +292,46 @@
                                         h(Button, { type: 'primary', onClick: runBacktest, loading: backtest.loading }, '开始复测')
                                     )
                                 ),
-                                style: { minHeight: 420 }
+                                style: { minHeight: 450 }
                             },
-                                h(Row, { gutter: [16, 16] },
-                                    h(Col, { xs: 24, lg: 16 },
-                                        h('div', { style: { height: '320px', padding: '10px' } },
-                                            h('canvas', { id: 'backtestPriceChart' })
-                                        )
+                                // 复测的指标选择器（与上方保持一致）
+                                h('div', { className: 'indicator-controls' },
+                                    h('label', null,
+                                        h('input', { type: 'checkbox', defaultChecked: true, onChange: () => {
+                                            if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart');
+                                        }, 'data-indicator-bt': 'price' }), '价格曲线'
                                     ),
-                                    h(Col, { xs: 24, lg: 8 },
-                                        h('div', { style: { height: '320px', padding: '10px' } },
-                                            h('canvas', { id: 'backtestEquityChart' })
-                                        )
+                                    h('label', null,
+                                        h('input', { type: 'checkbox', onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'sma5' }), 'SMA5'
+                                    ),
+                                    h('label', null,
+                                        h('input', { type: 'checkbox', onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'sma20' }), 'SMA20'
+                                    ),
+                                    h('label', null,
+                                        h('input', { type: 'checkbox', onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'sma50' }), 'SMA50'
+                                    ),
+                                    h('label', null,
+                                        h('input', { type: 'checkbox', defaultChecked: true, onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'bollinger' }), '布林带通道'
+                                    ),
+                                    h('label', null,
+                                        h('input', { type: 'checkbox', onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'macd' }), 'MACD线'
+                                    ),
+                                    h('label', null,
+                                        h('input', { type: 'checkbox', defaultChecked: true, onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'macd_signal' }), 'MACD信号线'
+                                    ),
+                                    h('label', null,
+                                        h('input', { type: 'checkbox', onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'rsi' }), 'RSI'
+                                    ),
+                                    h('label', null,
+                                        h('input', { type: 'checkbox', onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'scores' }), 'Score评分'
+                                    ),
+                                    h('label', null,
+                                        h('input', { type: 'checkbox', defaultChecked: true, onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'decisions' }), '交易决策'
                                     )
+                                ),
+                                // 图表区域（与上方一致）
+                                h('div', { style: { height: '280px', padding: '10px' } },
+                                    h('canvas', { id: 'backtestTechnicalChart' })
                                 ),
                                 backtest.data ? h('div', { style: { padding: '8px 12px', background: '#fafafa', borderRadius: 8, marginTop: 8 } },
                                     h(Space, { size: 'large' },

@@ -15,7 +15,7 @@ import ccxt
 import pandas as pd
 from typing import Dict, Any
 
-from technical_analysis import calculate_technical_indicators
+from technical_analysis import calculate_technical_indicators, get_sentiment_indicators, calculate_integrated_trading_score
 from strategy_decision import StrategyInterface
 from deepseekok3 import exchange, TRADE_CONFIG, deepseek_client
 
@@ -53,7 +53,8 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
     # 初始化策略接口
     strategy = StrategyInterface(deepseek_client)
 
-    labels = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M').tolist()
+    labels_full = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M').tolist()
+    labels_hm = df['timestamp'].dt.strftime('%H:%M').tolist()
     prices = df['close'].tolist()
     decisions = []  # 1 buy, -1 sell, 0 hold
     trades = []     # 每次信号记录
@@ -83,7 +84,7 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
 
         action_flag = 0
         reason = signal_data.get('reason', '')
-        ts = labels[i]
+    ts = labels_full[i]
         current_price = price_data['price']
 
         if signal == 'BUY' and not position_open:
@@ -134,13 +135,71 @@ def run_backtest(days: int = 2, interval: str = '3m') -> Dict[str, Any]:
         'avg_pnl_per_trade': round(avg_pnl, 2)
     }
 
+    # 计算 scores 以与技术图保持一致（使用当前情绪）
+    try:
+        sentiment_data = get_sentiment_indicators()
+    except Exception:
+        sentiment_data = None
+
+    scores = []
+    if sentiment_data is not None:
+        for i in range(len(df)):
+            try:
+                technical_data = {
+                    'sma_5': df['sma_5'].iloc[i],
+                    'sma_20': df['sma_20'].iloc[i],
+                    'sma_50': df['sma_50'].iloc[i],
+                    'rsi': df['rsi'].iloc[i],
+                    'macd': df['macd'].iloc[i],
+                    'macd_signal': df['macd_signal'].iloc[i],
+                    'macd_histogram': df['macd_histogram'].iloc[i],
+                    'bb_position': df['bb_position'].iloc[i]
+                }
+                sc = calculate_integrated_trading_score(
+                    current_price=df['close'].iloc[i],
+                    technical_data=technical_data,
+                    sentiment_data=sentiment_data
+                )
+                scores.append(sc)
+            except Exception:
+                scores.append(0)
+        df['score'] = scores
+    else:
+        df['score'] = 0
+
+    # 组装与技术指标分析相同结构的 chart 数据
+    klines_df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']].copy()
+    klines_df['timestamp'] = klines_df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
+
+    chart = {
+        'klines': klines_df.to_dict('records'),
+        'indicators': {
+            'sma5': df['sma_5'].fillna(0).tolist(),
+            'sma20': df['sma_20'].fillna(0).tolist(),
+            'sma50': df['sma_50'].fillna(0).tolist(),
+            'ema12': df['ema_12'].fillna(0).tolist(),
+            'ema26': df['ema_26'].fillna(0).tolist(),
+            'macd': df['macd'].fillna(0).tolist(),
+            'macd_signal': df['macd_signal'].fillna(0).tolist(),
+            'macd_histogram': df['macd_histogram'].fillna(0).tolist(),
+            'rsi': df['rsi'].fillna(50).tolist(),
+            'bb_upper': df['bb_upper'].bfill().ffill().tolist(),
+            'bb_middle': df['bb_middle'].bfill().ffill().tolist(),
+            'bb_lower': df['bb_lower'].bfill().ffill().tolist(),
+            'scores': (df['score'].fillna(0).tolist() if 'score' in df.columns else [0]*len(df)),
+            'decisions': decisions
+        },
+        'labels': labels_hm
+    }
+
     return {
-        'labels': labels,
+        'labels': labels_full,
         'prices': prices,
         'decisions': decisions,
         'equity_curve': equity_curve,
         'trades': trades,
-        'summary': summary
+        'summary': summary,
+        'chart': chart
     }
 
 
