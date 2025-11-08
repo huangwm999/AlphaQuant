@@ -11,6 +11,10 @@ import re
 from datetime import datetime
 from openai import OpenAI
 
+# 导入所需的数据和分析函数
+from technical_analysis import generate_technical_analysis_text
+from market_data import get_recent_ai_analysis, get_recent_trades
+
 
 class StrategyAnalyzer:
     """策略分析器类 - 负责AI策略决策"""
@@ -48,7 +52,7 @@ class StrategyAnalyzer:
             "is_fallback": True
         }
 
-    def analyze_with_deepseek(self, price_data, generate_technical_analysis_text, get_recent_ai_analysis, get_recent_trades, signal_history):
+    def analyze_with_deepseek(self, price_data, signal_history):
         """使用DeepSeek分析市场并生成交易信号（增强版）"""
 
         # 生成技术分析文本
@@ -204,11 +208,11 @@ BTC价格: ${price_data['price']:,.2f} USDT
         print("🔄 使用回退信号")
         return self.create_fallback_signal(price_data)
 
-    def analyze_market_strategy(self, price_data, generate_technical_analysis_text, get_recent_ai_analysis, get_recent_trades, signal_history, max_retries=2):
+    def analyze_market_strategy(self, price_data, signal_history, max_retries=2):
         """带重试的DeepSeek策略分析 - 对外接口"""
         for attempt in range(max_retries + 1):
             try:
-                signal_data = self.analyze_with_deepseek(price_data, generate_technical_analysis_text, get_recent_ai_analysis, get_recent_trades, signal_history)
+                signal_data = self.analyze_with_deepseek(price_data, signal_history)
                 
                 if signal_data and not signal_data.get('is_fallback', False):
                     print(f"✅ DeepSeek分析成功 (尝试 {attempt + 1}/{max_retries + 1})")
@@ -225,10 +229,3 @@ BTC价格: ${price_data['price']:,.2f} USDT
         
         print("❌ 所有重试都失败，使用回退信号")
         return self.create_fallback_signal(price_data)
-
-
-# 为了保持向后兼容性，提供旧接口的包装函数
-def analyze_with_deepseek_with_retry(deepseek_client, price_data, generate_technical_analysis_text, get_recent_ai_analysis, get_recent_trades, signal_history, max_retries=2):
-    """向后兼容的包装函数"""
-    analyzer = StrategyAnalyzer(deepseek_client)
-    return analyzer.analyze_market_strategy(price_data, generate_technical_analysis_text, get_recent_ai_analysis, get_recent_trades, signal_history, max_retries)

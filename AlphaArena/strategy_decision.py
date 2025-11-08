@@ -28,8 +28,7 @@ class StrategyInterface:
         # 内部实例化一个v1版本的分析器
         self._strategy_analyzer = StrategyAnalyzer(deepseek_client)
     
-    def analyze_market_strategy(self, price_data, generate_technical_analysis_text, 
-                               get_recent_ai_analysis, get_recent_trades, signal_history, max_retries=2):
+    def analyze_market_strategy(self, price_data, signal_history, max_retries=2):
         """
         分析市场策略的外部接口。
         
@@ -37,9 +36,6 @@ class StrategyInterface:
         """
         return self._strategy_analyzer.analyze_market_strategy(
             price_data=price_data,
-            generate_technical_analysis_text=generate_technical_analysis_text,
-            get_recent_ai_analysis=get_recent_ai_analysis,
-            get_recent_trades=get_recent_trades,
             signal_history=signal_history,
             max_retries=max_retries
         )

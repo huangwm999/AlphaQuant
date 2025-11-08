@@ -14,8 +14,7 @@ from market_data import (
     get_btc_ohlcv_enhanced, get_current_position, get_btc_ohlcv_for_web
 )
 from technical_analysis import (
-    calculate_sma, calculate_macd, calculate_rsi,
-    calculate_bollinger_bands, calculate_atr, calculate_stoch_rsi,
+    calculate_technical_indicators, get_support_resistance_levels,
     get_market_trend, generate_technical_analysis_text,
     get_sentiment_indicators, calculate_integrated_trading_score
 )
@@ -409,8 +408,7 @@ def trading_bot():
 
     # 4. 使用策略接口进行市场分析（带重试）
     signal_data = strategy_interface.analyze_market_strategy(
-        price_data, generate_technical_analysis_text, 
-        get_recent_ai_analysis, get_recent_trades, signal_history
+        price_data, signal_history
     )
 
     if signal_data:
