@@ -3,6 +3,7 @@
 from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
 import os
+import json
 from datetime import datetime, timedelta
 from data_manager import data_manager
 from deepseekok3 import exchange, TRADE_CONFIG
@@ -268,21 +269,60 @@ def get_technical_chart_data():
 
 @app.route('/api/backtest', methods=['POST'])
 def run_backtest_api():
-    """回测接口：默认回测最近2天，3分钟级别。可选传参 days, interval。"""
+    """回测接口：默认回测最近2天，15分钟级别。可选传参 days, interval, strategy_version。"""
     try:
         # 延迟导入，避免循环依赖
         from backtest import run_backtest
 
         data = request.get_json(silent=True) or {}
         days = int(data.get('days', 2))
-        interval = data.get('interval', '3m')
+        interval = data.get('interval', '15m')
+        strategy_version = data.get('strategy_version', 'strategy_decision_v2')
 
-        result = run_backtest(days=days, interval=interval)
+        result = run_backtest(days=days, interval=interval, strategy_version=strategy_version)
         if 'error' in result:
             return jsonify(result), 500
         return jsonify(result)
     except Exception as e:
         print(f"回测执行失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/strategy-config', methods=['GET'])
+def get_strategy_config():
+    """获取策略配置"""
+    try:
+        import os
+        config_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'strategy_config.json')
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        return jsonify(config)
+    except Exception as e:
+        print(f"获取策略配置失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/strategy-config/live', methods=['GET'])
+def get_live_strategy():
+    """获取当前实时交易使用的策略版本"""
+    try:
+        import os
+        config_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'strategy_config.json')
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        live_trading = config.get('live_trading', {})
+        
+        # 查找对应版本的详细信息
+        version = live_trading.get('version', 'strategy_decision_v2')
+        available = config.get('available_versions', [])
+        version_info = next((v for v in available if v['version'] == version), None)
+        
+        return jsonify({
+            'version': version,
+            'name': version_info.get('name', '未知策略') if version_info else '未知策略',
+            'description': version_info.get('description', '') if version_info else '',
+            'last_updated': live_trading.get('last_updated', '')
+        })
+    except Exception as e:
+        print(f"获取实时策略版本失败: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/', methods=['GET', 'POST'])

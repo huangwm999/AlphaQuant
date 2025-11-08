@@ -20,6 +20,21 @@ from technical_analysis import (
 )
 from strategy_decision import StrategyInterface
 
+def load_strategy_config():
+    """从配置文件加载策略配置"""
+    try:
+        config_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'strategy_config.json')
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        return config
+    except Exception as e:
+        print(f"⚠️ 加载策略配置失败: {e}，使用默认版本 strategy_decision_v2")
+        return {
+            'live_trading': {'version': 'strategy_decision_v2'},
+            'available_versions': [],
+            'backtest_default': {'version': 'strategy_decision_v2', 'days': 2, 'interval': '15m'}
+        }
+
 def save_trade_log(action, side, size, response):
     """保存交易日志到data/trade_logs.json"""
     log_entry = {
@@ -59,8 +74,10 @@ deepseek_client = OpenAI(
     base_url="https://api.deepseek.com"
 )
 
-# 初始化策略接口
-strategy_interface = StrategyInterface(deepseek_client)
+# 初始加载策略配置（仅用于启动时输出信息）
+initial_config = load_strategy_config()
+initial_version = initial_config.get('live_trading', {}).get('version', 'strategy_decision_v2')
+print(f"🎯 启动时策略版本: {initial_version}")
 
 # 统一交易记录封装，确保前端匹配到K线
 def record_trade(action: str, side: str, size: float, ref_price: float, response: dict, signal_data: dict, extra: dict | None = None):
@@ -453,7 +470,15 @@ def trading_bot():
             'unrealized_pnl': current_position['unrealized_pnl']
         }
 
-    # 4. 使用策略接口进行市场分析（带重试）
+    # 4. 每次都重新加载策略配置，支持动态切换
+    strategy_config = load_strategy_config()
+    strategy_version = strategy_config.get('live_trading', {}).get('version', 'strategy_decision_v2')
+    print(f"🔄 使用策略版本: {strategy_version}")
+    
+    # 使用当前配置的策略版本创建策略接口
+    strategy_interface = StrategyInterface(deepseek_client, strategy_version=strategy_version)
+    
+    # 使用策略接口进行市场分析（带重试）
     signal_data = strategy_interface.analyze_market_strategy(
         price_data, signal_history
     )

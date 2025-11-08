@@ -19,8 +19,9 @@
     <div id="root"></div>
     <script type="text/babel">
         const { useState, useEffect } = React;
-    const { Layout, Card, Row, Col, Table, Button, message, Typography, Space, Tabs, Statistic, Pagination, InputNumber } = antd;
+    const { Layout, Card, Row, Col, Table, Button, message, Typography, Space, Tabs, Statistic, Pagination, InputNumber, Select } = antd;
         const { Text } = Typography;
+        const { Option } = Select;
 
         function App() {
             const [data, setData] = useState({ system: {}, trades: [], performance: {}, analysis: [] });
@@ -30,12 +31,43 @@
             // 回测数据状态
             const [backtest, setBacktest] = useState({ loading: false, data: null, error: null });
             const [backtestDays, setBacktestDays] = useState(2); // 回测天数（默认2）
+            const [backtestStrategy, setBacktestStrategy] = useState('strategy_decision_v2'); // 回测策略版本
             const [analysisData, setAnalysisData] = useState({ data: [], pagination: {} });
+            // 策略配置状态
+            const [liveStrategy, setLiveStrategy] = useState({ version: 'strategy_decision_v2', name: 'strategy_decision_v2' });
+            const [availableStrategies, setAvailableStrategies] = useState([]);
             
             const handleLogout = () => {
                 localStorage.removeItem('isLoggedIn');
                 localStorage.removeItem('username');
                 window.location.href = '/';
+            };
+
+            // 加载策略配置
+            const loadStrategyConfig = async () => {
+                try {
+                    const response = await fetch(`/api/strategy-config?_t=${Date.now()}`);
+                    const configData = await response.json();
+                    
+                    // 设置实时策略信息（只显示版本号）
+                    const liveVersion = configData.live_trading?.version || 'strategy_decision_v2';
+                    
+                    setLiveStrategy({
+                        version: liveVersion,
+                        name: liveVersion  // 直接显示版本号
+                    });
+                    
+                    // 只显示启用的策略版本
+                    const enabled = (configData.available_versions || []).filter(v => v.enabled);
+                    setAvailableStrategies(enabled);
+                    
+                    // 设置回测默认版本
+                    if (configData.backtest_default?.version) {
+                        setBacktestStrategy(configData.backtest_default.version);
+                    }
+                } catch (error) {
+                    console.error('策略配置加载失败:', error);
+                }
             };
 
             // 加载AI分析数据（分页）
@@ -83,7 +115,11 @@
                     const res = await fetch('/api/backtest', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ days: backtestDays, interval: '15m' })
+                        body: JSON.stringify({ 
+                            days: backtestDays, 
+                            interval: '15m',
+                            strategy_version: backtestStrategy 
+                        })
                     });
                     const result = await res.json();
                     if (!res.ok) throw new Error(result.error || '回测失败');
@@ -109,6 +145,7 @@
             // days 变化时立即刷新技术图并重建定时刷新
             useEffect(() => { loadData(); const timer = setInterval(loadData, 5000); return () => clearInterval(timer); }, [days]);
             useEffect(() => { loadAnalysisData(); }, []); // 初始加载AI分析数据
+            useEffect(() => { loadStrategyConfig(); }, []); // 初始加载策略配置
             useEffect(() => data.trades?.length && window.initPriceChart && setTimeout(() => window.initPriceChart(data.trades), 100), [data.trades]);
             useEffect(() => data.performance?.daily_pnl && window.initDailyPnlChart && setTimeout(() => window.initDailyPnlChart(data.performance.daily_pnl), 100), [data.performance]);
             useEffect(() => technicalData && setTimeout(() => updateTechnicalChart(), 100), [technicalData]);
@@ -165,8 +202,21 @@
                         // 技术指标图表（占用全宽）
                         h(Col, { xs: 24 },
                             h(Card, { 
-                                title: h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-                                    h('span', null, `技术指标分析${technicalData?.current?.days ? '（最近' + technicalData.current.days + '天）' : ''}`),
+                                title: h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' } },
+                                    h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
+                                        h('span', null, `技术指标分析${technicalData?.current?.days ? '（最近' + technicalData.current.days + '天）' : ''}`),
+                                        // 显示实时策略版本
+                                        h('span', { 
+                                            style: { 
+                                                fontSize: '12px', 
+                                                color: '#1890ff', 
+                                                background: '#e6f7ff', 
+                                                padding: '2px 8px', 
+                                                borderRadius: '4px',
+                                                border: '1px solid #91d5ff'
+                                            } 
+                                        }, `实时策略: ${liveStrategy.name}`)
+                                    ),
                                     // 市场情绪信息
                                     technicalData?.sentiment ? 
                                         h('div', { style: { fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' } },
@@ -327,6 +377,23 @@
                                             },
         								style: { width: 80 }
                                         })
+                                    ),
+                                    // 策略版本选择器
+                                    h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginRight: 12 } },
+                                        h('span', { style: { fontSize: '12px', color: '#666' } }, '策略'),
+                                        h(Select, {
+                                            size: 'small',
+                                            value: backtestStrategy,
+                                            onChange: (value) => setBacktestStrategy(value),
+                                            style: { width: 200 }
+                                        }, 
+                                            availableStrategies.map(strategy => 
+                                                h(Option, { 
+                                                    key: strategy.version, 
+                                                    value: strategy.version
+                                                }, strategy.version)
+                                            )
+                                        )
                                     ),
                                     h('label', null,
                                         h('input', { type: 'checkbox', defaultChecked: true, onChange: () => {

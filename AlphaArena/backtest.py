@@ -83,12 +83,13 @@ def fetch_since_paginated(exchange: ccxt.Exchange, symbol: str, timeframe: str, 
     return df
 
 
-def run_backtest(days: int = 2, interval: str = '15m') -> Dict[str, Any]:
+def run_backtest(days: int = 2, interval: str = '15m', strategy_version: str = 'strategy_decision_v2') -> Dict[str, Any]:
     """
     运行回测。
     Args:
         days: 回测天数 (默认 2 天)
-        interval: K线级别 (默认 3m)
+        interval: K线级别 (默认 15m)
+        strategy_version: 策略版本 (默认 strategy_decision_v2)
     Returns:
         dict: { labels, prices, decisions, trades, equity_curve, summary }
     """
@@ -119,8 +120,8 @@ def run_backtest(days: int = 2, interval: str = '15m') -> Dict[str, Any]:
     # 计算技术指标
     df = calculate_technical_indicators(df)
 
-    # 初始化策略接口
-    strategy = StrategyInterface(deepseek_client)
+    # 初始化策略接口（使用指定版本）
+    strategy = StrategyInterface(deepseek_client, strategy_version=strategy_version)
 
     labels_full = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M').tolist()
     labels_hm = df['timestamp'].dt.strftime('%H:%M').tolist()

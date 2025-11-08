@@ -1,0 +1,25 @@
+{
+  "live_trading": {
+    "version": "strategy_decision_v2",
+    "last_updated": "2025-11-08T23:00:00"
+  },
+  "available_versions": [
+    {
+      "version": "strategy_decision_v1",
+      "enabled": false
+    },
+    {
+      "version": "strategy_decision_v2",
+      "enabled": true
+    },
+    {
+      "version": "strategy_decision_v3",
+      "enabled": true
+    }
+  ],
+  "backtest_default": {
+    "version": "strategy_decision_v2",
+    "days": 2,
+    "interval": "15m"
+  }
+}
