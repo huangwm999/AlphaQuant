@@ -105,7 +105,7 @@ TRADE_CONFIG = {
     # 新增智能仓位参数
     'position_management': {
         'enable_intelligent_position': True,  # 🆕 新增：是否启用智能仓位管理
-        'base_usdt_amount': 300,  # USDT投入下单基数 - 调整为20适合小资金账户
+        'base_usdt_amount': 200,  # USDT投入下单基数 - 调整为20适合小资金账户
         'high_confidence_multiplier': 1.5,
         'medium_confidence_multiplier': 1.0,
         'low_confidence_multiplier': 0.5,

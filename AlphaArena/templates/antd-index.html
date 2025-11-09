@@ -32,7 +32,16 @@
             // 回测数据状态
             const [backtest, setBacktest] = useState({ loading: false, data: null, error: null });
             const [backtestDays, setBacktestDays] = useState(2); // 回测天数（默认2）
-            const [backtestEndTime, setBacktestEndTime] = useState(''); // 回测截至时间
+            // 回测截至时间 - 默认为当前时间（格式: YYYY-MM-DDTHH:MM）
+            const [backtestEndTime, setBacktestEndTime] = useState(() => {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                const hours = String(now.getHours()).padStart(2, '0');
+                const minutes = String(now.getMinutes()).padStart(2, '0');
+                return `${year}-${month}-${day}T${hours}:${minutes}`;
+            });
             const [backtestStrategy, setBacktestStrategy] = useState('strategy_decision_v2'); // 回测策略版本
             const [analysisData, setAnalysisData] = useState({ data: [], pagination: {} });
             // 策略配置状态
