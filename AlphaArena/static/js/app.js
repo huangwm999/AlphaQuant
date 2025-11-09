@@ -82,7 +82,7 @@ window.initTechnicalChart = (data, selectedIndicators = [], chartId = 'technical
     const innerEl = document.getElementById(`${chartId}-inner`);
     // 仅为存在滚动容器的回测图设置动态宽度（技术指标分析已还原不滚动）
     if (scrollEl && innerEl && chartId === 'backtestTechnicalChart') {
-        const pxPerBar = 20; // 提高每个数据点像素宽度，扩大实际图表可视宽度
+        const pxPerBar = 13; // 降低每个数据点像素宽度，与技术指标图保持一致的紧凑度
         const labelsCount = Array.isArray(data.labels) ? data.labels.length : (data.klines ? data.klines.length : 0);
         const minWidth = scrollEl.clientWidth || 600;
         const targetWidth = Math.max(minWidth, labelsCount * pxPerBar);

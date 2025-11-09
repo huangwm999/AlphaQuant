@@ -28,6 +28,7 @@
             const [technicalData, setTechnicalData] = useState(null);
             const [analysisPage, setAnalysisPage] = useState(1);
             const [days, setDays] = useState(1); // 技术图窗口天数（默认1）
+            const [manualTradeContracts, setManualTradeContracts] = useState(0.01); // 手动交易张数（默认0.01张）
             // 回测数据状态
             const [backtest, setBacktest] = useState({ loading: false, data: null, error: null });
             const [backtestDays, setBacktestDays] = useState(2); // 回测天数（默认2）
@@ -244,21 +245,120 @@
                                         h('span', { style: { fontSize: '12px', color: '#999' } }, '情绪数据获取中...')
                                 ),
                                 style: { height: 450 } },
-                                // 控件 + 指标选择器
-                                h('div', { className: 'indicator-controls' },
-                                    // 天数输入控件（1~300，默认2）
-                                    h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginRight: 12 } },
-                                        h('span', { style: { fontSize: '12px', color: '#666' } }, '天数'),
-                                        h(InputNumber, {
-                                            min: 1, max: 300, size: 'small', value: days,
-                                            onChange: (v) => {
-                                                const nv = Number(v) || 2;
-                                                if (nv < 1 || nv > 300) return;
-                                                setDays(nv);
-                                            },
-                                            style: { width: 80 }
-                                        })
+                                // 控件布局：分为两行
+                                h('div', { style: { marginBottom: '8px' } },
+                                    // 第一行：天数、张数、买入、卖出按钮
+                                    h('div', { style: { marginBottom: '8px' } },
+                                        // 天数输入控件（1~300，默认1）
+                                        h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginRight: 12 } },
+                                            h('span', { style: { fontSize: '12px', color: '#666' } }, '天数'),
+                                            h(InputNumber, {
+                                                min: 1, max: 300, size: 'small', value: days,
+                                                onChange: (v) => {
+                                                    const nv = Number(v) || 1;
+                                                    if (nv < 1 || nv > 300) return;
+                                                    setDays(nv);
+                                                },
+                                                style: { width: 80 }
+                                            })
+                                        ),
+                                        // 张数输入控件（0.01~100，默认0.01，步长0.01）
+                                        h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginRight: 12 } },
+                                            h('span', { style: { fontSize: '12px', color: '#666' } }, '张数'),
+                                            h(InputNumber, {
+                                                min: 0.01, max: 100, size: 'small', 
+                                                value: manualTradeContracts,
+                                                step: 0.01,
+                                                precision: 2,
+                                                onChange: (v) => {
+                                                    const nv = Number(v) || 0.01;
+                                                    if (nv < 0.01 || nv > 100) return;
+                                                    setManualTradeContracts(nv);
+                                                },
+                                                style: { width: 80 }
+                                            })
+                                        ),
+                                        // 手动买入按钮
+                                        h(Button, {
+                                            type: 'primary',
+                                            size: 'small',
+                                            style: { marginRight: 8, backgroundColor: '#52c41a', borderColor: '#52c41a' },
+                                            onClick: async () => {
+                                                const confirmed = await new Promise(resolve => {
+                                                    antd.Modal.confirm({
+                                                        title: '确认手动买入',
+                                                        content: `确定要买入 ${manualTradeContracts} 张 (${(manualTradeContracts * 0.01).toFixed(4)} BTC) 吗？`,
+                                                        okText: '确认买入',
+                                                        cancelText: '取消',
+                                                        onOk: () => resolve(true),
+                                                        onCancel: () => resolve(false)
+                                                    });
+                                                });
+                                                if (!confirmed) return;
+                                                
+                                                try {
+                                                    const res = await fetch('/api/manual-trade', {
+                                                        method: 'POST',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ 
+                                                            signal: 'BUY',
+                                                            contracts: manualTradeContracts 
+                                                        })
+                                                    });
+                                                    const result = await res.json();
+                                                    if (res.ok) {
+                                                        message.success(`买入成功：${manualTradeContracts} 张`);
+                                                        loadData(); // 刷新数据
+                                                    } else {
+                                                        message.error(`买入失败: ${result.error || '未知错误'}`);
+                                                    }
+                                                } catch (err) {
+                                                    message.error(`买入失败: ${err.message}`);
+                                                }
+                                            }
+                                        }, '📈 买入'),
+                                        // 手动卖出按钮
+                                        h(Button, {
+                                            type: 'primary',
+                                            danger: true,
+                                            size: 'small',
+                                            onClick: async () => {
+                                                const confirmed = await new Promise(resolve => {
+                                                    antd.Modal.confirm({
+                                                        title: '确认手动卖出',
+                                                        content: `确定要卖出 ${manualTradeContracts} 张 (${(manualTradeContracts * 0.01).toFixed(4)} BTC) 吗？`,
+                                                        okText: '确认卖出',
+                                                        cancelText: '取消',
+                                                        onOk: () => resolve(true),
+                                                        onCancel: () => resolve(false)
+                                                    });
+                                                });
+                                                if (!confirmed) return;
+                                                
+                                                try {
+                                                    const res = await fetch('/api/manual-trade', {
+                                                        method: 'POST',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ 
+                                                            signal: 'SELL',
+                                                            contracts: manualTradeContracts 
+                                                        })
+                                                    });
+                                                    const result = await res.json();
+                                                    if (res.ok) {
+                                                        message.success(`卖出成功：${manualTradeContracts} 张`);
+                                                        loadData(); // 刷新数据
+                                                    } else {
+                                                        message.error(`卖出失败: ${result.error || '未知错误'}`);
+                                                    }
+                                                } catch (err) {
+                                                    message.error(`卖出失败: ${err.message}`);
+                                                }
+                                            }
+                                        }, '📉 卖出')
                                     ),
+                                    // 第二行：指标选择器
+                                    h('div', { className: 'indicator-controls' },
                                     h('label', null,
                                         h('input', { 
                                             type: 'checkbox', 
@@ -342,6 +442,7 @@
                                             'data-indicator': 'decisions'
                                         }),
                                         '交易决策'
+                                    )
                                     )
                                 ),
                                 // 图表区域（还原为无横向滚动）

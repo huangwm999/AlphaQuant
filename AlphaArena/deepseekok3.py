@@ -19,6 +19,7 @@ from technical_analysis import (
     get_sentiment_indicators, calculate_integrated_trading_score
 )
 from strategy_decision import StrategyInterface
+from trade_executor import execute_trade, calculate_position_size
 
 def load_strategy_config():
     """从配置文件加载策略配置"""
@@ -78,53 +79,6 @@ deepseek_client = OpenAI(
 initial_config = load_strategy_config()
 initial_version = initial_config.get('live_trading', {}).get('version', 'strategy_decision_v2')
 print(f"🎯 启动时策略版本: {initial_version}")
-
-# 统一交易记录封装，确保前端匹配到K线
-def record_trade(action: str, side: str, size: float, ref_price: float, response: dict, signal_data: dict, extra: dict | None = None):
-    """构造并保存一条标准化交易记录到 trades.json。
-    - 时间戳采用上海时区字符串 '%Y-%m-%d %H:%M:%S'
-    - 保存 signal/confidence/reason 字段，方便技术图 merge_asof 匹配
-    - 兼容旧字段 price/size
-    """
-    try:
-        ts = pd.Timestamp.now(tz='Asia/Shanghai').strftime('%Y-%m-%d %H:%M:%S')
-    except Exception:
-        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-    # 尝试提取订单关键信息（不同交易所字段兼容）
-    order_id = None
-    try:
-        order_id = response.get('id') or response.get('orderId') or (response.get('data') or {}).get('ordId')
-    except Exception:
-        order_id = None
-    try:
-        avg_price = response.get('average') or response.get('price') or response.get('lastFillPrice') or ref_price
-    except Exception:
-        avg_price = ref_price
-
-    trade_record = {
-        'timestamp': ts,
-        'action': action,
-        'side': side,
-        'qty': round(float(size), 6),
-        'ref_price': round(float(ref_price), 2),
-        'fill_price': round(float(avg_price), 2) if isinstance(avg_price, (int, float)) else avg_price,
-        'order_id': order_id,
-        'signal': signal_data.get('signal'),
-        'confidence': signal_data.get('confidence'),
-        'reason': signal_data.get('reason'),
-        'strategy_version': signal_data.get('strategy_version'),
-        'order_raw': response
-    }
-    if extra:
-        trade_record.update(extra)
-
-    # 兼容旧字段命名
-    trade_record['price'] = trade_record['ref_price']
-    trade_record['size'] = trade_record['qty']
-
-    save_trade_record(trade_record)
-    return trade_record
 
 # 初始化OKX交易所
 exchange = ccxt.okx({
@@ -215,219 +169,16 @@ def setup_exchange():
         return False
 
 
-def calculate_intelligent_position(signal_data, price_data, current_position):
-    """智能仓位计算函数 - 增强版"""
-    try:
-        base_usdt = TRADE_CONFIG['position_management']['base_usdt_amount']
-        
-        # 信心程度倍数
-        confidence_multipliers = {
-            'HIGH': TRADE_CONFIG['position_management']['high_confidence_multiplier'],
-            'MEDIUM': TRADE_CONFIG['position_management']['medium_confidence_multiplier'],
-            'LOW': TRADE_CONFIG['position_management']['low_confidence_multiplier']
-        }
-        
-        confidence_multiplier = confidence_multipliers.get(signal_data['confidence'], 1.0)
-        
-        # 趋势强度调整
-        trend_analysis = price_data.get('trend_analysis', {})
-        trend_strength = trend_analysis.get('strength', '中')
-        
-        if trend_strength == '强':
-            trend_multiplier = 1.3
-        elif trend_strength == '中':
-            trend_multiplier = 1.0
-        else:
-            trend_multiplier = 0.7
-        
-        # 根据RSI状态调整（超买超卖区域减仓）
-        rsi = price_data['technical_data'].get('rsi', 50)
-        if rsi > 75 or rsi < 25:
-            rsi_multiplier = 0.7
-        else:
-            rsi_multiplier = 1.0
-        
-        # 计算建议USDT金额
-        suggested_usdt = base_usdt * confidence_multiplier * trend_multiplier * rsi_multiplier
-        
-        # 转换为BTC数量
-        btc_amount = suggested_usdt / price_data['price']
-        
-        # 确保符合交易所最小交易量要求
-        min_amount = 0.0001  # OKX最小交易量
-        if btc_amount < min_amount:
-            btc_amount = min_amount
-        
-        # 最大仓位限制
-        max_position_usdt = base_usdt * TRADE_CONFIG['position_management']['max_position_ratio']
-        max_btc_amount = max_position_usdt / price_data['price']
-        
-        if btc_amount > max_btc_amount:
-            btc_amount = max_btc_amount
-        
-        print(f"\n📊 智能仓位计算:")
-        print(f"   - 基础投入: ${base_usdt}")
-        print(f"   - 信心倍数: {confidence_multiplier}")
-        print(f"   - 趋势倍数: {trend_multiplier}")
-        print(f"   - RSI倍数: {rsi_multiplier}")
-        print(f"   - 建议金额: ${suggested_usdt:.2f}")
-        print(f"   - 计算仓位: {btc_amount:.4f} BTC")
-        
-        return btc_amount
-        
-    except Exception as e:
-        print(f"仓位计算错误: {e}")
-        return 0.0001  # 返回最小仓位
-
-
 def execute_intelligent_trade(signal_data, price_data):
-    """执行智能交易 - OKX版本（支持同方向加仓减仓）"""
-    global position
-
-    current_position = get_current_position(exchange, TRADE_CONFIG)
-
-    # 防止频繁反转的逻辑保持不变
-    if current_position and signal_data['signal'] != 'HOLD':
-        current_side = current_position['side']  # 'long' 或 'short'
-
-        if signal_data['signal'] == 'BUY':
-            new_side = 'long'
-        elif signal_data['signal'] == 'SELL':
-            new_side = 'short'
-        else:
-            new_side = None
-
-        # 如果方向相反，需要高信心才执行
-        # if new_side != current_side:
-        #     if signal_data['confidence'] != 'HIGH':
-        #         print(f"🔒 非高信心反转信号，保持现有{current_side}仓")
-        #         return
-
-        #     if len(signal_history) >= 2:
-        #         last_signals = [s['signal'] for s in signal_history[-2:]]
-        #         if signal_data['signal'] in last_signals:
-        #             print(f"🔒 近期已出现{signal_data['signal']}信号，避免频繁反转")
-        #             return
-
-    # 使用智能仓位计算
-    trade_size = calculate_intelligent_position(signal_data, price_data, current_position)
+    """执行智能交易 - 调用独立交易执行模块"""
+    result = execute_trade(exchange, TRADE_CONFIG, signal_data, price_data)
     
-    # 如果仓位计算失败或为0，跳过交易
-    if trade_size <= 0:
-        print("❌ 仓位计算失败或仓位为0，跳过交易")
-        return
-
-    print(f"📊 计算仓位: {trade_size:.4f} BTC")
-
-    try:
-        if signal_data['signal'] == 'BUY':
-            if current_position and current_position['side'] == 'long':
-                # 同向加仓
-                print(f"📈 多头加仓: {trade_size:.4f} BTC")
-                response = exchange.create_market_buy_order(
-                    TRADE_CONFIG['symbol'], 
-                    trade_size
-                )
-                print(f"✅ 多头加仓成功: {response}")
-            elif current_position and current_position['side'] == 'short':
-                # 先平空仓
-                current_size = abs(current_position['size'])
-                print(f"📉 平空仓: {current_size:.4f} BTC")
-                close_response = exchange.create_market_buy_order(
-                    TRADE_CONFIG['symbol'], 
-                    current_size
-                )
-                print(f"✅ 平空成功: {close_response}")
-                
-                # 再开多仓
-                time.sleep(1)  # 稍微等待一下
-                print(f"📈 开多仓: {trade_size:.4f} BTC")
-                open_response = exchange.create_market_buy_order(
-                    TRADE_CONFIG['symbol'], 
-                    trade_size
-                )
-                print(f"✅ 开多成功: {open_response}")
-                
-                # 保存两个交易记录（统一格式）
-                record_trade('CLOSE_SHORT', 'buy', current_size, price_data['price'], close_response, signal_data)
-                record_trade('OPEN_LONG', 'buy', trade_size, price_data['price'], open_response, signal_data)
-                save_trade_log('CLOSE_SHORT', 'buy', current_size, close_response)
-                save_trade_log('OPEN_LONG', 'buy', trade_size, open_response)
-                return
-            else:
-                # 直接开多仓
-                print(f"📈 开多仓: {trade_size:.4f} BTC")
-                response = exchange.create_market_buy_order(
-                    TRADE_CONFIG['symbol'], 
-                    trade_size
-                )
-                print(f"✅ 开多成功: {response}")
-            
-            # 保存交易记录（统一格式）
-            action = 'OPEN_LONG' if not current_position else 'ADD_LONG'
-            record_trade(action, 'buy', trade_size, price_data['price'], response, signal_data)
-            save_trade_log(action, 'buy', trade_size, response)
-
-        elif signal_data['signal'] == 'SELL':
-            if current_position and current_position['side'] == 'short':
-                # 同向加仓
-                print(f"📉 空头加仓: {trade_size:.4f} BTC")
-                response = exchange.create_market_sell_order(
-                    TRADE_CONFIG['symbol'], 
-                    trade_size
-                )
-                print(f"✅ 空头加仓成功: {response}")
-            elif current_position and current_position['side'] == 'long':
-                # 先平多仓
-                current_size = abs(current_position['size'])
-                print(f"📈 平多仓: {current_size:.4f} BTC")
-                close_response = exchange.create_market_sell_order(
-                    TRADE_CONFIG['symbol'], 
-                    current_size
-                )
-                print(f"✅ 平多成功: {close_response}")
-                
-                # 再开空仓
-                time.sleep(1)
-                print(f"📉 开空仓: {trade_size:.4f} BTC")
-                open_response = exchange.create_market_sell_order(
-                    TRADE_CONFIG['symbol'], 
-                    trade_size
-                )
-                print(f"✅ 开空成功: {open_response}")
-                
-                # 保存两个交易记录（统一格式）
-                record_trade('CLOSE_LONG', 'sell', current_size, price_data['price'], close_response, signal_data)
-                record_trade('OPEN_SHORT', 'sell', trade_size, price_data['price'], open_response, signal_data)
-                save_trade_log('CLOSE_LONG', 'sell', current_size, close_response)
-                save_trade_log('OPEN_SHORT', 'sell', trade_size, open_response)
-                return
-            else:
-                # 直接开空仓
-                print(f"📉 开空仓: {trade_size:.4f} BTC")
-                response = exchange.create_market_sell_order(
-                    TRADE_CONFIG['symbol'], 
-                    trade_size
-                )
-                print(f"✅ 开空成功: {response}")
-                
-            # 保存交易记录（统一格式）
-            action = 'OPEN_SHORT' if not current_position else 'ADD_SHORT'
-            record_trade(action, 'sell', trade_size, price_data['price'], response, signal_data)
-            save_trade_log(action, 'sell', trade_size, response)
-
-        else:  # HOLD或其他
-            print("💤 保持观望")
-
-    except ccxt.BaseError as e:
-        if "Insufficient balance" in str(e):
-            print(f"❌ 余额不足: {e}")
-        else:
-            print(f"❌ 交易所错误: {e}")
-    except Exception as e:
-        print(f"❌ 交易执行失败: {e}")
-        import traceback
-        traceback.print_exc()
+    if result['success']:
+        print(f"✅ {result['message']}")
+    else:
+        print(f"❌ {result['message']}")
+    
+    return result
 
 
 def trading_bot():

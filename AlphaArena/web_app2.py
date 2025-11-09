@@ -7,6 +7,9 @@ import json
 from datetime import datetime, timedelta
 from data_manager import data_manager
 from deepseekok3 import exchange, TRADE_CONFIG
+from trade_executor import execute_trade
+from market_data import get_btc_ohlcv_enhanced
+from technical_analysis import calculate_technical_indicators, get_support_resistance_levels, get_market_trend
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 CORS(app)
@@ -331,6 +334,73 @@ def get_live_strategy():
     except Exception as e:
         print(f"获取实时策略版本失败: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/manual-trade', methods=['POST'])
+def manual_trade():
+    """手动交易接口 - 立即执行买入或卖出操作，支持自定义张数"""
+    try:
+        data = request.get_json()
+        signal = data.get('signal', '').upper()
+        contracts = float(data.get('contracts', 0.01))  # 获取张数，默认0.01张
+        
+        if signal not in ['BUY', 'SELL']:
+            return jsonify({'error': '无效的交易信号，必须是 BUY 或 SELL'}), 400
+        
+        # 验证张数范围（最小0.01张=0.0001BTC，最大100张=1BTC）
+        if contracts < 0.01 or contracts > 100:
+            return jsonify({'error': '张数必须在 0.01 到 100 之间'}), 400
+        
+        print(f"📝 手动交易: {contracts}张")
+        
+        # 获取当前市场数据
+        price_data = get_btc_ohlcv_enhanced(
+            exchange, TRADE_CONFIG,
+            calculate_technical_indicators,
+            get_support_resistance_levels,
+            get_market_trend
+        )
+        
+        if not price_data:
+            return jsonify({'error': '无法获取市场数据'}), 500
+        
+        # 构造信号数据
+        signal_data = {
+            'signal': signal,
+            'confidence': 'HIGH',  # 手动交易默认高信心
+            'reason': f'用户手动{signal}操作：{contracts}张',
+            'strategy_version': 'manual_trade',
+            'stop_loss': None,
+            'take_profit': None,
+            'manual_contracts': contracts  # 记录手动指定的张数
+        }
+        
+        # 传递张数到 trade_executor（在那里转换为BTC）
+        price_data['manual_contracts'] = contracts
+        
+        # 执行交易
+        result = execute_trade(exchange, TRADE_CONFIG, signal_data, price_data)
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'message': result['message'],
+                'trades': result['trades'],
+                'price': price_data['price'],
+                'contracts': contracts,
+                'btc_amount': contracts * 0.01
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result['message']
+            }), 400
+            
+    except Exception as e:
+        print(f"手动交易执行失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'交易执行失败: {str(e)}'}), 500
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
