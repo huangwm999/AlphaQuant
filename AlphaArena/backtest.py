@@ -534,12 +534,29 @@ def run_backtest(days: int = 2, interval: str = '15m', strategy_version: str = '
         'labels': labels_hm_display
     }
 
+    # 计算完整的天收益数据（不受20天限制）
+    daily_pnl_map = {}
+    for trade in trades:
+        if trade.get('pnl') is not None:
+            date = trade['timestamp'].split(' ')[0]  # 提取日期 YYYY-MM-DD
+            if date not in daily_pnl_map:
+                daily_pnl_map[date] = 0
+            daily_pnl_map[date] += trade['pnl']
+    
+    # 转换为列表并排序
+    daily_pnl_list = [
+        {'date': date, 'pnl': round(pnl, 2)}
+        for date, pnl in sorted(daily_pnl_map.items(), key=lambda x: x[0], reverse=True)
+    ]
+
     return {
         'labels': labels_display,
         'prices': prices_display,
         'decisions': decisions_display,
         'equity_curve': equity_curve_display,
         'trades': trades_display,
+        'trades_full': trades,  # 完整的交易记录（不受截断限制）
+        'daily_pnl': daily_pnl_list,  # 天收益列表（完整数据）
         'summary': summary,
         'chart': chart
     }

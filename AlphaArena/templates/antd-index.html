@@ -31,7 +31,8 @@
             const [manualTradeContracts, setManualTradeContracts] = useState(0.01); // 手动交易张数（默认0.01张）
             // 回测数据状态
             const [backtest, setBacktest] = useState({ loading: false, data: null, error: null });
-            const [backtestDays, setBacktestDays] = useState(2); // 回测天数（默认2）
+            const [backtestDays, setBacktestDays] = useState(3); // 回测天数（默认2）
+            const [dailyPnlPage, setDailyPnlPage] = useState(1); // 天收益列表页码
             // 回测截至时间 - 默认为当前时间（格式: YYYY-MM-DDTHH:MM）
             const [backtestEndTime, setBacktestEndTime] = useState(() => {
                 const now = new Date();
@@ -150,6 +151,26 @@
                 }
             };
 
+            // 计算天收益数据
+            const calculateDailyPnl = (trades) => {
+                if (!trades || trades.length === 0) return [];
+                
+                const dailyMap = {};
+                trades.forEach(trade => {
+                    if (trade.pnl !== null && trade.pnl !== undefined) {
+                        const date = trade.timestamp.split(' ')[0]; // 提取日期部分 YYYY-MM-DD
+                        if (!dailyMap[date]) {
+                            dailyMap[date] = 0;
+                        }
+                        dailyMap[date] += trade.pnl;
+                    }
+                });
+                
+                // 转换为数组并排序
+                return Object.entries(dailyMap)
+                    .map(([date, pnl]) => ({ date, pnl: parseFloat(pnl.toFixed(2)) }))
+                    .sort((a, b) => new Date(b.date) - new Date(a.date)); // 按日期降序
+            };
 
 
             window.updateTechnicalChart = updateTechnicalChart;
@@ -569,10 +590,71 @@
                                     )
                                     )
                                 ),
-                                // 图表区域（高度调整为当前的150%：280px -> 420px）
-                                h('div', { id: 'backtestTechnicalChart-scroll', style: { height: '420px', padding: '10px', overflowX: 'auto' } },
-                                    h('div', { id: 'backtestTechnicalChart-inner', style: { minWidth: '100%', height: '100%' } },
-                                        h('canvas', { id: 'backtestTechnicalChart', style: { height: '100%', width: '100%' } })
+                                // 图表和天收益列表区域 - 分为两列
+                                h(Row, { gutter: 16 },
+                                    // 左侧：图表区域
+                                    h(Col, { xs: 24, lg: 18 },
+                                        h('div', { id: 'backtestTechnicalChart-scroll', style: { height: '420px', padding: '10px', overflowX: 'auto' } },
+                                            h('div', { id: 'backtestTechnicalChart-inner', style: { minWidth: '100%', height: '100%' } },
+                                                h('canvas', { id: 'backtestTechnicalChart', style: { height: '100%', width: '100%' } })
+                                            )
+                                        )
+                                    ),
+                                    // 右侧：天收益列表
+                                    h(Col, { xs: 24, lg: 6 },
+                                        backtest.data ? (() => {
+                                            // 使用后端返回的完整天收益数据（不受20天限制）
+                                            const dailyPnl = backtest.data.daily_pnl || [];
+                                            const pageSize = 10;
+                                            const totalPages = Math.ceil(dailyPnl.length / pageSize);
+                                            const startIdx = (dailyPnlPage - 1) * pageSize;
+                                            const endIdx = startIdx + pageSize;
+                                            const currentData = dailyPnl.slice(startIdx, endIdx);
+                                            
+                                            return h('div', { style: { height: '420px', display: 'flex', flexDirection: 'column' } },
+                                                h('h4', { style: { margin: '0 0 12px 0', fontSize: '14px', fontWeight: 'bold' } }, '天收益列表'),
+                                                h('div', { style: { flex: 1, overflowY: 'auto', border: '1px solid #d9d9d9', borderRadius: '4px' } },
+                                                    h('table', { style: { width: '100%', fontSize: '12px', borderCollapse: 'collapse' } },
+                                                        h('thead', null,
+                                                            h('tr', { style: { background: '#fafafa', borderBottom: '1px solid #d9d9d9' } },
+                                                                h('th', { style: { padding: '8px', textAlign: 'left', fontWeight: 'bold' } }, '日期'),
+                                                                h('th', { style: { padding: '8px', textAlign: 'right', fontWeight: 'bold' } }, '收益(USDT)')
+                                                            )
+                                                        ),
+                                                        h('tbody', null,
+                                                            currentData.length > 0 ? currentData.map((item, idx) =>
+                                                                h('tr', { 
+                                                                    key: item.date,
+                                                                    style: { borderBottom: '1px solid #f0f0f0' }
+                                                                },
+                                                                    h('td', { style: { padding: '8px' } }, item.date),
+                                                                    h('td', { 
+                                                                        style: { 
+                                                                            padding: '8px', 
+                                                                            textAlign: 'right',
+                                                                            color: item.pnl >= 0 ? '#f5222d' : '#52c41a',
+                                                                            fontWeight: 'bold'
+                                                                        } 
+                                                                    }, `${item.pnl >= 0 ? '+' : ''}${item.pnl}`)
+                                                                )
+                                                            ) : h('tr', null,
+                                                                h('td', { colSpan: 2, style: { padding: '20px', textAlign: 'center', color: '#999' } }, '暂无数据')
+                                                            )
+                                                        )
+                                                    )
+                                                ),
+                                                totalPages > 1 ? h('div', { style: { marginTop: '8px', textAlign: 'center' } },
+                                                    h(antd.Pagination, {
+                                                        simple: true,
+                                                        size: 'small',
+                                                        current: dailyPnlPage,
+                                                        total: dailyPnl.length,
+                                                        pageSize: pageSize,
+                                                        onChange: (page) => setDailyPnlPage(page)
+                                                    })
+                                                ) : null
+                                            );
+                                        })() : h('div', { style: { height: '420px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999', fontSize: '14px' } }, '运行回测后显示天收益')
                                     )
                                 ),
                                 backtest.data ? h('div', { style: { padding: '8px 12px', background: '#fafafa', borderRadius: 8, marginTop: 8, fontSize: '12px', lineHeight: '20px' } },
