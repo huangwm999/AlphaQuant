@@ -308,9 +308,9 @@ def main():
         return
     
     # 设置定时任务
-    schedule.every(1).minutes.do(trading_bot)
+    schedule.every(3).minutes.do(trading_bot)
     
-    print("⏰ 定时任务已设置: 每1分钟执行一次")
+    print("⏰ 定时任务已设置: 每3分钟执行一次")
     print("🤖 机器人开始运行...")
     print("按 Ctrl+C 停止程序")
     

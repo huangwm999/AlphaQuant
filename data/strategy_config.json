@@ -1,6 +1,6 @@
 {
   "live_trading": {
-    "version": "strategy_decision_v2",
+    "version": "strategy_decision_v4",
     "last_updated": "2025-11-09T00:00:00"
   },
   "available_versions": [

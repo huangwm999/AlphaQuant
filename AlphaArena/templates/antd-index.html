@@ -488,7 +488,19 @@
                                                 value: backtestEndTime,
                                                 onChange: (e) => setBacktestEndTime(e.target.value),
                                                 title: '回测截至时间，默认为当前时间'
-                                            })
+                                            }),
+                                            h(Button, {
+                                                size: 'small',
+                                                onClick: () => {
+                                                    const now = new Date();
+                                                    const year = now.getFullYear();
+                                                    const month = String(now.getMonth() + 1).padStart(2, '0');
+                                                    const day = String(now.getDate()).padStart(2, '0');
+                                                    const hours = String(now.getHours()).padStart(2, '0');
+                                                    const minutes = String(now.getMinutes()).padStart(2, '0');
+                                                    setBacktestEndTime(`${year}-${month}-${day}T${hours}:${minutes}`);
+                                                }
+                                            }, '当前')
                                         ),
                                         // 回测天数输入控件（1~300，默认2）
                                         h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginRight: 12 } },
