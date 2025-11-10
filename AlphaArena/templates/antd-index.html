@@ -451,6 +451,15 @@
                                     h('label', null,
                                         h('input', { 
                                             type: 'checkbox',
+                                            defaultChecked: true,
+                                            onChange: (e) => window.updateTechnicalChart(),
+                                            'data-indicator': 'macd_histogram'
+                                        }),
+                                        'MACD柱状图'
+                                    ),
+                                    h('label', null,
+                                        h('input', { 
+                                            type: 'checkbox',
                                             onChange: (e) => window.updateTechnicalChart(),
                                             'data-indicator': 'rsi'
                                         }),
@@ -578,6 +587,9 @@
                                     ),
                                     h('label', null,
                                         h('input', { type: 'checkbox', defaultChecked: true, onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'macd_signal' }), 'MACD信号线'
+                                    ),
+                                    h('label', null,
+                                        h('input', { type: 'checkbox', defaultChecked: true, onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'macd_histogram' }), 'MACD柱状图'
                                     ),
                                     h('label', null,
                                         h('input', { type: 'checkbox', onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'rsi' }), 'RSI'

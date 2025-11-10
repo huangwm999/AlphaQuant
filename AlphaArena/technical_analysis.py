@@ -27,7 +27,8 @@ def calculate_technical_indicators(df):
         df['ema_26'] = df['close'].ewm(span=26).mean()
         df['macd'] = df['ema_12'] - df['ema_26']
         df['macd_signal'] = df['macd'].ewm(span=9).mean()
-        df['macd_histogram'] = df['macd'] - df['macd_signal']
+        # MACD柱状图归一化: (MACD柱子 ÷ 当前价格) × 10000
+        df['macd_histogram'] = ((df['macd'] - df['macd_signal']) / df['close']) * 10000
 
         # 相对强弱指数 (RSI)
         delta = df['close'].diff()

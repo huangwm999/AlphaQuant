@@ -57,8 +57,23 @@ function initChart(chartId, data, type = 'line') {
     window[chartId] = new Chart(ctx, configs[type] || configs.price);
 }
 
-// 价格图表初始化函数
-window.initPriceChart = (trades) => trades?.length && initChart('priceChart', { labels: trades.map(t => moment(t.timestamp).format('HH:mm')), prices: trades.map(t => t.price) }, 'price');
+// 价格图表初始化函数 - 根据数据范围自动选择时间格式
+window.initPriceChart = (trades) => {
+    if (!trades?.length) return;
+    
+    // 检查数据跨度是否超过1天
+    const firstTime = moment(trades[0].timestamp);
+    const lastTime = moment(trades[trades.length - 1].timestamp);
+    const daysDiff = lastTime.diff(firstTime, 'days');
+    
+    // 如果跨越多天，显示"月-日 时:分"，否则只显示"时:分"
+    const format = daysDiff > 0 ? 'MM-DD HH:mm' : 'HH:mm';
+    
+    initChart('priceChart', { 
+        labels: trades.map(t => moment(t.timestamp).format(format)), 
+        prices: trades.map(t => t.price) 
+    }, 'price');
+};
 
 // 初始化图表的包装函数
 window.initDailyPnlChart = (dailyPnl) => dailyPnl && Object.keys(dailyPnl).length > 0 && initChart('dailyPnlChart', dailyPnl, 'dailyPnl');
@@ -232,6 +247,25 @@ window.initTechnicalChart = (data, selectedIndicators = [], chartId = 'technical
         });
     }
     
+    // MACD柱状图 - 使用独立Y轴和柱状图显示
+    if (selectedIndicators.includes('macd_histogram')) {
+        const histogramData = data.indicators.macd_histogram || [];
+        datasets.push({
+            label: 'MACD柱状图',
+            data: histogramData,
+            type: 'bar',
+            yAxisID: 'y-macd-histogram',  // 使用独立Y轴
+            backgroundColor: histogramData.map(v => 
+                v >= 0 ? 'rgba(82, 196, 26, 0.8)' : 'rgba(245, 34, 45, 0.8)'
+            ),
+            borderColor: histogramData.map(v => 
+                v >= 0 ? '#52c41a' : '#f5222d'
+            ),
+            borderWidth: 1,
+            barThickness: 'flex'
+        });
+    }
+    
     // 交易决策曲线 - 新增（增强初始化）
     if (selectedIndicators.includes('decisions')) {
         // 确保决策数据存在且长度正确
@@ -291,6 +325,19 @@ window.initTechnicalChart = (data, selectedIndicators = [], chartId = 'technical
             position: 'right',
             grid: { display: false },
             ticks: { font: { size: 10 } }
+        };
+    }
+    
+    // MACD柱状图轴 - 独立Y轴
+    if (selectedIndicators.includes('macd_histogram')) {
+        scales['y-macd-histogram'] = {
+            type: 'linear',
+            position: 'right',
+            grid: { display: false },
+            ticks: { 
+                font: { size: 10 },
+                callback: v => v.toFixed(1)  // 显示一位小数
+            }
         };
     }
     
