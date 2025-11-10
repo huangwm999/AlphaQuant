@@ -11,8 +11,8 @@
     <script src="/static/js/babel.min.js"></script>
     <script src="/static/js/moment.min.js"></script>
     <script src="/static/js/antd.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.1/dist/chartjs-adapter-moment.min.js"></script>
+    <script src="/static/js/chart.js"></script>
+    <script src="/static/js/chartjs-adapter-moment.min.js"></script>
     <script type="text/babel" src="/static/js/app.js"></script>
 </head>
 <body>
@@ -34,15 +34,7 @@
             const [backtestDays, setBacktestDays] = useState(3); // 回测天数（默认2）
             const [dailyPnlPage, setDailyPnlPage] = useState(1); // 天收益列表页码
             // 回测截至时间 - 默认为当前时间（格式: YYYY-MM-DDTHH:MM）
-            const [backtestEndTime, setBacktestEndTime] = useState(() => {
-                const now = new Date();
-                const year = now.getFullYear();
-                const month = String(now.getMonth() + 1).padStart(2, '0');
-                const day = String(now.getDate()).padStart(2, '0');
-                const hours = String(now.getHours()).padStart(2, '0');
-                const minutes = String(now.getMinutes()).padStart(2, '0');
-                return `${year}-${month}-${day}T${hours}:${minutes}`;
-            });
+            const [backtestEndTime, setBacktestEndTime] = useState(() => window.formatDateTime());
             const [backtestStrategy, setBacktestStrategy] = useState('strategy_decision_v2'); // 回测策略版本
             const [analysisData, setAnalysisData] = useState({ data: [], pagination: {} });
             // 策略配置状态
@@ -187,33 +179,40 @@
             const { btc_info: btc = {}, account_info: account = {}, ai_signal: aiSignal = {}, position = {} } = system;
             const tableProps = { rowKey: 'key', size: 'small', pagination: false };
             const statusCards = [
-                ['₿', 'BTC价格', btc.price ? `$${btc.price.toLocaleString()}` : '--', btc.change ? `${btc.change > 0 ? '+' : ''}${btc.change.toFixed(2)}%` : '--', '#f7931a'],
-                ['💰', '账户余额', account.balance ? `${account.balance.toFixed(2)} USDT` : '--', '可用资金', '#52c41a'],
-                ['🧠', 'AI决策', aiSignal.signal || '--', `信心: ${aiSignal.confidence || '--'}`, '#722ed1'],
-                ['📈', '当前持仓', position.side ? `${position.side === 'LONG' || position.side === 'long' ? '多' : '空'}仓 ${position.size || 0} 张` : '--', position.unrealized_pnl ? `盈亏: ${position.unrealized_pnl.toFixed(4)} USDT` : '--', position.unrealized_pnl != null ? (position.unrealized_pnl >= 0 ? '#f5222d' : '#52c41a') : '#1890ff']
+                ['₿', 'BTC价格', btc.price ? `$${btc.price.toLocaleString()}` : '--', btc.change ? `${btc.change > 0 ? '+' : ''}${btc.change.toFixed(2)}%` : '--'],
+                ['💰', '账户总权益', account.equity !== undefined && account.equity !== null ? `${account.equity.toFixed(2)} USDT` : '--', account.balance !== undefined && account.balance !== null ? `可用: ${account.balance.toFixed(2)} USDT` : '可用资金'],
+                ['🧠', 'AI决策', aiSignal.signal || '--', `信心: ${aiSignal.confidence || '--'}`],
+                ['📈', '当前持仓', position.side ? `${position.side === 'LONG' || position.side === 'long' ? '多' : '空'}仓 ${position.size || 0} 张` : '--', position.unrealized_pnl !== undefined && position.unrealized_pnl !== null ? `盈亏: ${position.unrealized_pnl >= 0 ? '+' : ''}${position.unrealized_pnl.toFixed(4)} USDT` : '--']
             ];
             const perfStats = [
-                [performance.total_trades || 0, '总交易次数', '📊', '#1890ff'],
-                [`${performance.total_trades > 0 ? ((performance.winning_trades || 0) / performance.total_trades * 100).toFixed(1) : 0}%`, '胜率', '✅', '#52c41a'],
-                [(performance.total_pnl || 0).toFixed(2), '总盈亏', '💰', performance.total_pnl >= 0 ? '#f5222d' : '#52c41a'],
-                [performance.total_trades > 0 ? (performance.total_pnl / performance.total_trades).toFixed(3) : '0.000', '平均盈亏', '📈', performance.total_pnl >= 0 ? '#f5222d' : '#52c41a']
+                [performance.total_trades || 0, '总交易次数', '📊'],
+                [`${performance.total_trades > 0 ? ((performance.winning_trades || 0) / performance.total_trades * 100).toFixed(1) : 0}%`, '胜率', '✅'],
+                [(performance.total_pnl || 0).toFixed(2), '总盈亏', '💰'],
+                [performance.total_trades > 0 ? (performance.total_pnl / performance.total_trades).toFixed(3) : '0.000', '平均盈亏', '📈']
             ];
 
-            const createStatCard = (icon, title, value, subtitle, color) => 
-                h(Card, { className: 'balance-card' },
-                    h('div', { style: { display: 'flex', alignItems: 'center', marginBottom: 8 } },
-                        h('span', { style: { fontSize: '24px', marginRight: 8, color } }, icon),
+            const createStatCard = (icon, title, value, subtitle, idx) => {
+                // 判断是否需要颜色
+                let subtitleClass = 'text-sm text-2';
+                if (idx === 3 && position.unrealized_pnl !== undefined && position.unrealized_pnl !== null) {
+                    // 当前持仓的盈亏颜色
+                    subtitleClass = `text-sm font-bold ${position.unrealized_pnl >= 0 ? 'text-error' : 'text-success'}`;
+                }
+                return h(Card, { className: 'card' },
+                    h('div', { className: 'card-header' },
+                        h('span', { className: 'card-icon' }, icon),
                         h(Text, { type: 'secondary' }, title)
                     ),
-                    h('div', { className: 'big-number' }, value),
-                    h('div', { style: { fontSize: '12px', color: subtitle.includes('盈亏:') ? color : '#666' } }, subtitle)
+                    h('div', { className: 'text-xl font-bold' }, value),
+                    h('div', { className: subtitleClass }, subtitle)
                 );
+            };
 
-            return h(Layout, { style: { minHeight: '100vh', background: '#f5f5f5' } },
+            return h(Layout, { className: 'app-layout' },
                 // 顶部标题栏
-                h(Layout.Header, { style: { background: '#fff', padding: '0 50px', boxShadow: '0 2px 8px #0001' } },
-                    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '64px' } },
-                        h(Space, null, h('span', null, '🤖'), h('span', { style: { fontSize: '18px', fontWeight: 'bold', color: '#1890ff' } }, 'OKX BTC交易机器人')),
+                h(Layout.Header, { className: 'app-header' },
+                    h('div', { className: 'app-header-content' },
+                        h(Space, null, h('span', null, '🤖'), h('span', { className: 'app-title' }, 'OKX BTC交易机器人')),
                         h(Space, null,
                             h('span', { className: 'status-online' }, '运行中'),
                             h('span', null, `最后更新: ${moment().format('YYYY/M/D HH:mm:ss')}`),
@@ -222,270 +221,69 @@
                     )
                 ),
 
-                h(Layout.Content, { style: { maxWidth: 1400, margin: '24px auto', padding: '0 24px', width: '100%' } },
+                h(Layout.Content, { className: 'app-content' },
                     // 指标卡片行
-                    h(Row, { gutter: [16, 16], style: { marginBottom: 16 } },
-                        ...statusCards.map(([icon, title, value, subtitle, color]) => 
-                            h(Col, { xs: 24, sm: 12, lg: 6 }, createStatCard(icon, title, value, subtitle, color))
+                    h(Row, { gutter: [16, 16], className: 'mb-lg' },
+                        ...statusCards.map(([icon, title, value, subtitle], idx) => 
+                            h(Col, { xs: 24, sm: 12, lg: 6 }, createStatCard(icon, title, value, subtitle, idx))
                         )
                     ),
 
                     // 技术指标图表行
-                    h(Row, { gutter: [16, 16], style: { marginBottom: 16 } },
+                    h(Row, { gutter: [16, 16], className: 'mb-lg' },
                         // 技术指标图表（占用全宽）
                         h(Col, { xs: 24 },
                             h(Card, { 
-                                title: h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' } },
-                                    h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
+                                title: h('div', { className: 'card-title-flex' },
+                                    h('div', { className: 'card-title-left' },
                                         h('span', null, `技术指标分析${technicalData?.current?.days ? '（最近' + technicalData.current.days + '天）' : ''}`),
                                         // 显示实时策略版本
-                                        h('span', { 
-                                            style: { 
-                                                fontSize: '12px', 
-                                                color: '#1890ff', 
-                                                background: '#e6f7ff', 
-                                                padding: '2px 8px', 
-                                                borderRadius: '4px',
-                                                border: '1px solid #91d5ff'
-                                            } 
-                                        }, `实时策略: ${liveStrategy.name}`)
+                                        h('span', { className: 'badge badge-primary' }, `实时策略: ${liveStrategy.name}`)
                                     ),
-                                    // 市场情绪信息
+                                    // 市场情绪信息 - 靠右对齐
                                     technicalData?.sentiment ? 
-                                        h('div', { style: { fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' } },
-                                            h('span', { style: { color: '#666' } }, '市场情绪:'),
-                                            h('span', { 
-                                                style: { 
-                                                    color: technicalData.sentiment.trend === 'bullish' ? '#52c41a' : 
-                                                           technicalData.sentiment.trend === 'bearish' ? '#f5222d' : '#faad14',
-                                                    fontWeight: 'bold'
-                                                }
-                                            }, 
+                                        h('div', { className: 'flex-center gap-sm text-sm' },
+                                            h('span', { className: 'sentiment-label' }, '市场情绪:'),
+                                            h('span', { className: technicalData.sentiment.trend === 'bullish' ? 'sentiment-bullish' : technicalData.sentiment.trend === 'bearish' ? 'sentiment-bearish' : 'sentiment-neutral' }, 
                                                 `乐观${(technicalData.sentiment.positive_ratio * 100).toFixed(1)}% 悲观${(technicalData.sentiment.negative_ratio * 100).toFixed(1)}%`
                                             ),
-                                            h('span', { 
-                                                style: { 
-                                                    color: technicalData.sentiment.net_sentiment >= 0 ? '#52c41a' : '#f5222d',
-                                                    fontSize: '11px'
-                                                }
-                                            }, 
+                                            h('span', { className: `sentiment-net-value ${technicalData.sentiment.net_sentiment >= 0 ? 'text-success' : 'text-error'}` }, 
                                                 `净值${technicalData.sentiment.net_sentiment >= 0 ? '+' : ''}${technicalData.sentiment.net_sentiment.toFixed(3)}`
                                             )
                                         ) : 
-                                        h('span', { style: { fontSize: '12px', color: '#999' } }, '情绪数据获取中...')
+                                        h('span', { className: 'sentiment-loading' }, '情绪数据获取中...')
                                 ),
-                                style: { height: 450 } },
+                                className: 'chart-3xl' },
                                 // 控件布局：分为两行
-                                h('div', { style: { marginBottom: '8px' } },
+                                h('div', { className: 'mb-sm' },
                                     // 第一行：天数、张数、买入、卖出按钮
-                                    h('div', { style: { marginBottom: '8px' } },
-                                        // 天数输入控件（1~300，默认1）
-                                        h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginRight: 12 } },
-                                            h('span', { style: { fontSize: '12px', color: '#666' } }, '天数'),
-                                            h(InputNumber, {
-                                                min: 1, max: 300, size: 'small', value: days,
-                                                onChange: (v) => {
-                                                    const nv = Number(v) || 1;
-                                                    if (nv < 1 || nv > 300) return;
-                                                    setDays(nv);
-                                                },
-                                                style: { width: 80 }
-                                            })
-                                        ),
-                                        // 张数输入控件（0.01~100，默认0.01，步长0.01）
-                                        h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginRight: 12 } },
-                                            h('span', { style: { fontSize: '12px', color: '#666' } }, '张数'),
-                                            h(InputNumber, {
-                                                min: 0.01, max: 100, size: 'small', 
-                                                value: manualTradeContracts,
-                                                step: 0.01,
-                                                precision: 2,
-                                                onChange: (v) => {
-                                                    const nv = Number(v) || 0.01;
-                                                    if (nv < 0.01 || nv > 100) return;
-                                                    setManualTradeContracts(nv);
-                                                },
-                                                style: { width: 80 }
-                                            })
-                                        ),
-                                        // 手动买入按钮
+                                    h('div', { className: 'controls-row' },
+                                        // 天数输入控件（使用通用函数）
+                                        window.createNumberInput('天数', days, setDays, { min: 1, max: 300 }),
+                                        // 张数输入控件（使用通用函数）
+                                        window.createNumberInput('张数', manualTradeContracts, setManualTradeContracts, { 
+                                            min: 0.01, max: 100, step: 0.01, precision: 2 
+                                        }),
+                                        // 手动买入按钮（使用通用交易函数）
                                         h(Button, {
                                             type: 'primary',
                                             size: 'small',
-                                            style: { marginRight: 8, backgroundColor: '#52c41a', borderColor: '#52c41a' },
-                                            onClick: async () => {
-                                                const confirmed = await new Promise(resolve => {
-                                                    antd.Modal.confirm({
-                                                        title: '确认手动买入',
-                                                        content: `确定要买入 ${manualTradeContracts} 张 (${(manualTradeContracts * 0.01).toFixed(4)} BTC) 吗？`,
-                                                        okText: '确认买入',
-                                                        cancelText: '取消',
-                                                        onOk: () => resolve(true),
-                                                        onCancel: () => resolve(false)
-                                                    });
-                                                });
-                                                if (!confirmed) return;
-                                                
-                                                try {
-                                                    const res = await fetch('/api/manual-trade', {
-                                                        method: 'POST',
-                                                        headers: { 'Content-Type': 'application/json' },
-                                                        body: JSON.stringify({ 
-                                                            signal: 'BUY',
-                                                            contracts: manualTradeContracts 
-                                                        })
-                                                    });
-                                                    const result = await res.json();
-                                                    if (res.ok) {
-                                                        message.success(`买入成功：${manualTradeContracts} 张`);
-                                                        loadData(); // 刷新数据
-                                                    } else {
-                                                        message.error(`买入失败: ${result.error || '未知错误'}`);
-                                                    }
-                                                } catch (err) {
-                                                    message.error(`买入失败: ${err.message}`);
-                                                }
-                                            }
+                                            className: 'btn-buy',
+                                            onClick: () => window.executeTrade('BUY', manualTradeContracts, loadData)
                                         }, '📈 买入'),
-                                        // 手动卖出按钮
+                                        // 手动卖出按钮（使用通用交易函数）
                                         h(Button, {
                                             type: 'primary',
                                             danger: true,
                                             size: 'small',
-                                            onClick: async () => {
-                                                const confirmed = await new Promise(resolve => {
-                                                    antd.Modal.confirm({
-                                                        title: '确认手动卖出',
-                                                        content: `确定要卖出 ${manualTradeContracts} 张 (${(manualTradeContracts * 0.01).toFixed(4)} BTC) 吗？`,
-                                                        okText: '确认卖出',
-                                                        cancelText: '取消',
-                                                        onOk: () => resolve(true),
-                                                        onCancel: () => resolve(false)
-                                                    });
-                                                });
-                                                if (!confirmed) return;
-                                                
-                                                try {
-                                                    const res = await fetch('/api/manual-trade', {
-                                                        method: 'POST',
-                                                        headers: { 'Content-Type': 'application/json' },
-                                                        body: JSON.stringify({ 
-                                                            signal: 'SELL',
-                                                            contracts: manualTradeContracts 
-                                                        })
-                                                    });
-                                                    const result = await res.json();
-                                                    if (res.ok) {
-                                                        message.success(`卖出成功：${manualTradeContracts} 张`);
-                                                        loadData(); // 刷新数据
-                                                    } else {
-                                                        message.error(`卖出失败: ${result.error || '未知错误'}`);
-                                                    }
-                                                } catch (err) {
-                                                    message.error(`卖出失败: ${err.message}`);
-                                                }
-                                            }
+                                            onClick: () => window.executeTrade('SELL', manualTradeContracts, loadData)
                                         }, '📉 卖出')
                                     ),
-                                    // 第二行：指标选择器
-                                    h('div', { className: 'indicator-controls' },
-                                    h('label', null,
-                                        h('input', { 
-                                            type: 'checkbox', 
-                                            defaultChecked: true,
-                                            onChange: (e) => window.updateTechnicalChart(),
-                                            'data-indicator': 'price'
-                                        }),
-                                        '价格曲线'
-                                    ),
-                                    h('label', null,
-                                        h('input', { 
-                                            type: 'checkbox',
-                                            onChange: (e) => window.updateTechnicalChart(),
-                                            'data-indicator': 'sma5'
-                                        }),
-                                        'SMA5'
-                                    ),
-                                    h('label', null,
-                                        h('input', { 
-                                            type: 'checkbox',
-                                            onChange: (e) => window.updateTechnicalChart(),
-                                            'data-indicator': 'sma20'
-                                        }),
-                                        'SMA20'
-                                    ),
-                                    h('label', null,
-                                        h('input', { 
-                                            type: 'checkbox',
-                                            onChange: (e) => window.updateTechnicalChart(),
-                                            'data-indicator': 'sma50'
-                                        }),
-                                        'SMA50'
-                                    ),
-                                    h('label', null,
-                                        h('input', { 
-                                            type: 'checkbox',
-                                            defaultChecked: true,
-                                            onChange: (e) => window.updateTechnicalChart(),
-                                            'data-indicator': 'bollinger'
-                                        }),
-                                        '布林带通道'
-                                    ),
-                                    h('label', null,
-                                        h('input', { 
-                                            type: 'checkbox',
-                                            onChange: (e) => window.updateTechnicalChart(),
-                                            'data-indicator': 'macd'
-                                        }),
-                                        'MACD线'
-                                    ),
-                                    h('label', null,
-                                        h('input', { 
-                                            type: 'checkbox',
-                                            defaultChecked: true,
-                                            onChange: (e) => window.updateTechnicalChart(),
-                                            'data-indicator': 'macd_signal'
-                                        }),
-                                        'MACD信号线'
-                                    ),
-                                    h('label', null,
-                                        h('input', { 
-                                            type: 'checkbox',
-                                            defaultChecked: true,
-                                            onChange: (e) => window.updateTechnicalChart(),
-                                            'data-indicator': 'macd_histogram'
-                                        }),
-                                        'MACD柱状图'
-                                    ),
-                                    h('label', null,
-                                        h('input', { 
-                                            type: 'checkbox',
-                                            onChange: (e) => window.updateTechnicalChart(),
-                                            'data-indicator': 'rsi'
-                                        }),
-                                        'RSI'
-                                    ),
-                                    h('label', null,
-                                        h('input', { 
-                                            type: 'checkbox',
-                                            onChange: (e) => window.updateTechnicalChart(),
-                                            'data-indicator': 'scores'
-                                        }),
-                                        'Score评分'
-                                    ),
-                                    h('label', null,
-                                        h('input', { 
-                                            type: 'checkbox',
-                                            defaultChecked: true,
-                                            onChange: (e) => window.updateTechnicalChart(),
-                                            'data-indicator': 'decisions'
-                                        }),
-                                        '交易决策'
-                                    )
-                                    )
+                                    // 第二行：指标选择器（使用配置化生成）
+                                    window.createIndicatorControls('indicator', () => window.updateTechnicalChart())
                                 ),
-                                // 图表区域（还原为无横向滚动）
-                                h('div', { style: { height: '280px', padding: '10px' } },
+                                // 图表区域
+                                h('div', { className: 'chart-md chart-wrapper' },
                                     h('canvas', { id: 'technicalChart' })
                                 )
                             )
@@ -493,66 +291,48 @@
                     ),
 
                     // 回测视图（技术指标图结构完全一致）
-                    h(Row, { gutter: [16, 16], style: { marginBottom: 16 } },
+                    h(Row, { gutter: [16, 16], className: 'mb-lg' },
                         h(Col, { xs: 24 },
                             h(Card, { 
-                                title: h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                                title: h('div', { className: 'card-title-flex' },
                                     h('span', null, `回测视图 (最近${backtestDays}天 · 15分钟)`),
+                                    // 开始复测按钮 - 靠右对齐
                                     h(Space, { size: 'middle' },
-                                        backtest.loading ? h('span', { style: { color: '#faad14' } }, '计算中…') : null,
+                                        backtest.loading ? h('span', { className: 'text-warning' }, '计算中…') : null,
                                         h(Button, { type: 'primary', onClick: runBacktest, loading: backtest.loading }, '开始复测')
                                     )
                                 ),
-                                style: { minHeight: 450 }
+                                minHeight: 450
                             },
                                 // 回测的控件区域：分为两行
-                                h('div', { style: { marginBottom: '8px' } },
-                                    // 第一行：截至时间、天数、策略
-                                    h('div', { style: { marginBottom: '8px' } },
-                                        // 截至时间输入控件
-                                        h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginRight: 12 } },
-                                            h('span', { style: { fontSize: '12px', color: '#666' } }, '截至时间'),
+                                h('div', { className: 'mb-sm' },
+                                    // 第一行：愰至时间、天数、策略
+                                    h('div', { className: 'controls-row' },
+                                        // 愰至时间输入控件
+                                        h('div', { className: 'control-group' },
+                                            window.createLabel('愰至时间'),
                                             h('input', {
                                                 type: 'datetime-local',
-                                                style: { fontSize: '12px', padding: '4px 8px', border: '1px solid #d9d9d9', borderRadius: '2px' },
+                                                className: 'datetime-input',
                                                 value: backtestEndTime,
                                                 onChange: (e) => setBacktestEndTime(e.target.value),
-                                                title: '回测截至时间，默认为当前时间'
+                                                title: '回测愰至时间，默认为当前时间'
                                             }),
                                             h(Button, {
                                                 size: 'small',
-                                                onClick: () => {
-                                                    const now = new Date();
-                                                    const year = now.getFullYear();
-                                                    const month = String(now.getMonth() + 1).padStart(2, '0');
-                                                    const day = String(now.getDate()).padStart(2, '0');
-                                                    const hours = String(now.getHours()).padStart(2, '0');
-                                                    const minutes = String(now.getMinutes()).padStart(2, '0');
-                                                    setBacktestEndTime(`${year}-${month}-${day}T${hours}:${minutes}`);
-                                                }
+                                                onClick: () => setBacktestEndTime(window.formatDateTime())
                                             }, '当前')
                                         ),
-                                        // 回测天数输入控件（1~300，默认2）
-                                        h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginRight: 12 } },
-                                            h('span', { style: { fontSize: '12px', color: '#666' } }, '天数'),
-                                            h(InputNumber, {
-                                                min: 1, max: 300, size: 'small', value: backtestDays,
-                                                onChange: (v) => {
-                                                    const nv = Number(v) || 2;
-                                                    if (nv < 1 || nv > 300) return;
-                                                    setBacktestDays(nv);
-                                                },
-            								style: { width: 80 }
-                                            })
-                                        ),
+                                        // 回测天数输入控件（使用通用函数）
+                                        window.createNumberInput('天数', backtestDays, setBacktestDays, { min: 1, max: 300 }),
                                         // 策略版本选择器
-                                        h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginRight: 12 } },
-                                            h('span', { style: { fontSize: '12px', color: '#666' } }, '策略'),
+                                        h('div', { className: 'control-group' },
+                                            window.createLabel('策略'),
                                             h(Select, {
                                                 size: 'small',
                                                 value: backtestStrategy,
                                                 onChange: (value) => setBacktestStrategy(value),
-                                                style: { width: 200 }
+                                                className: 'select-sm'
                                             }, 
                                                 availableStrategies.map(strategy => 
                                                     h(Option, { 
@@ -563,52 +343,16 @@
                                             )
                                         )
                                     ),
-                                    // 第二行：指标选择器
-                                    h('div', { className: 'indicator-controls' },
-                                    h('label', null,
-                                        h('input', { type: 'checkbox', defaultChecked: true, onChange: () => {
-                                            if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart');
-                                        }, 'data-indicator-bt': 'price' }), '价格曲线'
-                                    ),
-                                    h('label', null,
-                                        h('input', { type: 'checkbox', onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'sma5' }), 'SMA5'
-                                    ),
-                                    h('label', null,
-                                        h('input', { type: 'checkbox', onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'sma20' }), 'SMA20'
-                                    ),
-                                    h('label', null,
-                                        h('input', { type: 'checkbox', onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'sma50' }), 'SMA50'
-                                    ),
-                                    h('label', null,
-                                        h('input', { type: 'checkbox', defaultChecked: true, onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'bollinger' }), '布林带通道'
-                                    ),
-                                    h('label', null,
-                                        h('input', { type: 'checkbox', onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'macd' }), 'MACD线'
-                                    ),
-                                    h('label', null,
-                                        h('input', { type: 'checkbox', defaultChecked: true, onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'macd_signal' }), 'MACD信号线'
-                                    ),
-                                    h('label', null,
-                                        h('input', { type: 'checkbox', defaultChecked: true, onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'macd_histogram' }), 'MACD柱状图'
-                                    ),
-                                    h('label', null,
-                                        h('input', { type: 'checkbox', onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'rsi' }), 'RSI'
-                                    ),
-                                    h('label', null,
-                                        h('input', { type: 'checkbox', onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'scores' }), 'Score评分'
-                                    ),
-                                    h('label', null,
-                                        h('input', { type: 'checkbox', defaultChecked: true, onChange: () => { if (!backtest.data) return; const cbs = document.querySelectorAll('input[data-indicator-bt]'); const sel = Array.from(cbs).filter(cb => cb.checked).map(cb => cb.dataset.indicatorBt); window.initTechnicalChart && window.initTechnicalChart(backtest.data.chart, sel, 'backtestTechnicalChart'); }, 'data-indicator-bt': 'decisions' }), '交易决策'
-                                    )
-                                    )
+                                    // 第二行：指标选择器（使用配置化生成）
+                                    window.createIndicatorControls('indicator-bt', () => window.updateBacktestChart(backtest.data))
                                 ),
                                 // 图表和天收益列表区域 - 分为两列
                                 h(Row, { gutter: 16 },
                                     // 左侧：图表区域
                                     h(Col, { xs: 24, lg: 18 },
-                                        h('div', { id: 'backtestTechnicalChart-scroll', style: { height: '420px', padding: '10px', overflowX: 'auto' } },
-                                            h('div', { id: 'backtestTechnicalChart-inner', style: { minWidth: '100%', height: '100%' } },
-                                                h('canvas', { id: 'backtestTechnicalChart', style: { height: '100%', width: '100%' } })
+                                        h('div', { id: 'backtestTechnicalChart-scroll', className: 'chart-2xl chart-wrapper chart-scrollable' },
+                                            h('div', { id: 'backtestTechnicalChart-inner', className: 'chart-inner-container' },
+                                                h('canvas', { id: 'backtestTechnicalChart', className: 'w-full h-full' })
                                             )
                                         )
                                     ),
@@ -623,39 +367,31 @@
                                             const endIdx = startIdx + pageSize;
                                             const currentData = dailyPnl.slice(startIdx, endIdx);
                                             
-                                            return h('div', { style: { height: '420px', display: 'flex', flexDirection: 'column' } },
-                                                h('h4', { style: { margin: '0 0 12px 0', fontSize: '14px', fontWeight: 'bold' } }, '天收益列表'),
-                                                h('div', { style: { flex: 1, overflowY: 'auto', border: '1px solid #d9d9d9', borderRadius: '4px' } },
-                                                    h('table', { style: { width: '100%', fontSize: '12px', borderCollapse: 'collapse' } },
+                                            return h('div', { className: 'chart-2xl flex-col' },
+                                                h('h4', { className: 'text-md text-bold mb-md' }, '天收益列表'),
+                                                h('div', { className: 'table-container' },
+                                                    h('table', { className: 'table-simple' },
                                                         h('thead', null,
-                                                            h('tr', { style: { background: '#fafafa', borderBottom: '1px solid #d9d9d9' } },
-                                                                h('th', { style: { padding: '8px', textAlign: 'left', fontWeight: 'bold' } }, '日期'),
-                                                                h('th', { style: { padding: '8px', textAlign: 'right', fontWeight: 'bold' } }, '收益(USDT)')
+                                                            h('tr', null,
+                                                                h('th', null, '日期'),
+                                                                h('th', { className: 'text-right' }, '收益(USDT)')
                                                             )
                                                         ),
                                                         h('tbody', null,
                                                             currentData.length > 0 ? currentData.map((item, idx) =>
                                                                 h('tr', { 
-                                                                    key: item.date,
-                                                                    style: { borderBottom: '1px solid #f0f0f0' }
+                                                                    key: item.date
                                                                 },
-                                                                    h('td', { style: { padding: '8px' } }, item.date),
-                                                                    h('td', { 
-                                                                        style: { 
-                                                                            padding: '8px', 
-                                                                            textAlign: 'right',
-                                                                            color: item.pnl >= 0 ? '#f5222d' : '#52c41a',
-                                                                            fontWeight: 'bold'
-                                                                        } 
-                                                                    }, `${item.pnl >= 0 ? '+' : ''}${item.pnl}`)
+                                                                    h('td', null, item.date),
+                                                                    h('td', { className: `text-right text-bold ${item.pnl >= 0 ? 'text-error' : 'text-success'}` }, `${item.pnl >= 0 ? '+' : ''}${item.pnl}`)
                                                                 )
                                                             ) : h('tr', null,
-                                                                h('td', { colSpan: 2, style: { padding: '20px', textAlign: 'center', color: '#999' } }, '暂无数据')
+                                                                h('td', { colSpan: 2, className: 'text-center text-disabled p-lg' }, '暂无数据')
                                                             )
                                                         )
                                                     )
                                                 ),
-                                                totalPages > 1 ? h('div', { style: { marginTop: '8px', textAlign: 'center' } },
+                                                totalPages > 1 ? h('div', { className: 'text-center mt-sm' },
                                                     h(antd.Pagination, {
                                                         simple: true,
                                                         size: 'small',
@@ -666,17 +402,17 @@
                                                     })
                                                 ) : null
                                             );
-                                        })() : h('div', { style: { height: '420px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999', fontSize: '14px' } }, '运行回测后显示天收益')
+                                        })() : h('div', { className: 'chart-2xl loading-container text-md' }, '运行回测后显示天收益')
                                     )
                                 ),
-                                backtest.data ? h('div', { style: { padding: '8px 12px', background: '#fafafa', borderRadius: 8, marginTop: 8, fontSize: '12px', lineHeight: '20px' } },
+                                backtest.data ? h('div', { className: 'summary-box mt-sm' },
                                     h(Space, { size: 'middle', wrap: true },
                                         h('span', null, `数据点: ${backtest.data.summary.data_points}`),
                                         h('span', null, `信号数: ${backtest.data.summary.total_signals}`),
                                         h('span', null, `已平仓: ${backtest.data.summary.closed_trades}`),
-                                        h('span', { style: { color: backtest.data.summary.net_pnl_total >= 0 ? '#f5222d' : '#52c41a', fontWeight: 'bold' } }, `净收益: ${backtest.data.summary.net_pnl_total} USDT`),
-                                        h('span', { style: { color: backtest.data.summary.gross_pnl_total >= 0 ? '#f5222d' : '#52c41a' } }, `毛收益: ${backtest.data.summary.gross_pnl_total} USDT`),
-                                        h('span', { style: { color: '#fa8c16' } }, `手续费: ${backtest.data.summary.total_fees} USDT`),
+                                        h('span', { className: `text-bold ${backtest.data.summary.net_pnl_total >= 0 ? 'text-error' : 'text-success'}` }, `净收益: ${backtest.data.summary.net_pnl_total} USDT`),
+                                        h('span', { className: backtest.data.summary.gross_pnl_total >= 0 ? 'text-error' : 'text-success' }, `毛收益: ${backtest.data.summary.gross_pnl_total} USDT`),
+                                        h('span', { className: 'text-warning' }, `手续费: ${backtest.data.summary.total_fees} USDT`),
                                         h('span', null, `胜率: ${backtest.data.summary.win_rate}%`),
                                         h('span', null, `均(毛): ${backtest.data.summary.avg_pnl_gross} USDT`),
                                         h('span', null, `均(净): ${backtest.data.summary.avg_pnl_net} USDT`)
@@ -687,36 +423,44 @@
                     ),
 
                     // 图表和绩效行
-                    h(Row, { gutter: [16, 16], style: { marginBottom: 16 } },
+                    h(Row, { gutter: [16, 16], className: 'mb-lg' },
                         h(Col, { xs: 24, lg: 16 },
-                            h(Card, { title: '价格走势 & 交易信号', style: { height: 400 } },
-                                h('div', { style: { height: '320px', padding: '10px' } },
+                            h(Card, { title: '价格走势 & 交易信号' },
+                                h('div', { className: 'chart-md chart-wrapper' },
                                     h('canvas', { id: 'priceChart' })
                                 )
                             )
                         ),
                         h(Col, { xs: 24, lg: 8 },
-                            h(Card, { title: '交易绩效', style: { height: 400 } },
+                            h(Card, { title: '交易绩效', className: 'chart' },
                                 // 统计指标行
-                                h(Row, { gutter: [8, 8], style: { marginBottom: 16 } },
-                                    ...perfStats.map((v, i) => 
-                                        h(Col, { xs: 12, key: i },
+                                h(Row, { gutter: [8, 8], className: 'mb-lg' },
+                                    ...perfStats.map((v, i) => {
+                                        // 计算颜色
+                                        let valueColor = '#1890ff';  // 默认颜色
+                                        if (v[1].includes('总盈亏') || v[1].includes('平均盈亏')) {
+                                            const val = parseFloat(v[0]);
+                                            valueColor = val >= 0 ? '#f5222d' : '#52c41a';
+                                        } else if (v[1].includes('胜率')) {
+                                            valueColor = '#52c41a';
+                                        }
+                                        return h(Col, { xs: 12, key: i },
                                             h(Card, { bordered: true, size: 'small' },
                                                 h(Statistic, { 
                                                     title: v[1], 
                                                     value: v[0], 
                                                     prefix: v[2], 
                                                     suffix: v[1].includes('盈亏') ? 'USDT' : '', 
-                                                    valueStyle: { color: v[3], fontSize: '18px' } 
+                                                    valueStyle: { color: valueColor, fontSize: '18px' } 
                                                 })
                                             )
-                                        )
-                                    )
+                                        );
+                                    })
                                 ),
                                 // 每日盈亏图表
-                                h('div', { style: { padding: 12, background: '#fafafa', borderRadius: 8, height: '120px' } },
-                                    h(Text, { strong: true, style: { display: 'block', marginBottom: 8 } }, '每日盈亏'),
-                                    h('div', { style: { height: '70px' } },
+                                h('div', { className: 'p-md daily-chart-box' },
+                                    h(Text, { strong: true, className: 'mb-sm d-block' }, '每日盈亏'),
+                                    h('div', { className: 'chart-sm' },
                                         h('canvas', { id: 'dailyPnlChart' })
                                     )
                                 )
@@ -726,7 +470,7 @@
 
                     h(Row, { gutter: [16, 16] },
                         h(Col, { xs: 24, lg: 12 },
-                            h(Card, { title: '最近交易记录', style: { height: 450 } },
+                            h(Card, { title: '最近交易记录', className: 'chart-lg' },
                                 h(Table, {
                                     dataSource: trades.slice(-10).reverse().map((item, i) => ({ ...item, key: item.id || i })),
                                     columns: tradeColumns, ...tableProps,
@@ -735,7 +479,7 @@
                             )
                         ),
                         h(Col, { xs: 24, lg: 12 },
-                            h(Card, { title: 'AI分析详情', style: { height: 450 } },
+                            h(Card, { title: 'AI分析详情', className: 'chart-lg' },
                                 h(Tabs, { 
                                     defaultActiveKey: '1', 
                                     size: 'small',
@@ -743,10 +487,10 @@
                                         {
                                             key: '1',
                                             label: '当前分析',
-                                            children: h(Space, { direction: 'vertical', style: { width: '100%' }, size: 'middle' },
+                                            children: h(Space, { direction: 'vertical', className: 'w-full', size: 'middle' },
                                                 h('div', null,
                                                     h(Text, { strong: true }, '决策理由'),
-                                                    h('div', { style: { marginTop: 8, padding: 16, background: '#f5f5f5', borderRadius: 8, fontSize: '14px', lineHeight: '1.6', maxHeight: '120px', overflowY: 'auto' } },
+                                                    h('div', { className: 'box box-scroll mt' },
                                                         aiSignal.reason || '系统正在分析市场数据，请稍候...'
                                                     )
                                                 ),
@@ -754,7 +498,7 @@
                                                     ...['止损价格', '止盈价格'].map((label, i) => 
                                                         h(Col, { span: 12 },
                                                             h(Text, { strong: true }, label),
-                                                            h('div', { style: { fontSize: '20px', fontWeight: 'bold', color: i ? '#52c41a' : '#f5222d', marginTop: 8 } },
+                                                            h('div', { className: `text-lg font-bold mt ${i ? 'text-success' : 'text-error'}` },
                                                                 (i ? aiSignal.take_profit : aiSignal.stop_loss) ? `$${(i ? aiSignal.take_profit : aiSignal.stop_loss).toLocaleString()}` : '--'
                                                             )
                                                         )
@@ -768,11 +512,11 @@
                                         {
                                             key: '2',
                                             label: '历史记录',
-                                            children: h('div', { style: { height: '100%' } },
+                                            children: h('div', { className: 'h-full' },
                                                 h(Table, {
                                                     dataSource: analysisData.data?.map((item, i) => ({ ...item, key: item.id || i })) || [],
                                                     expandable: {
-                                                        expandedRowRender: record => h('div', { style: { padding: '16px', background: '#fafafa', borderRadius: '4px', fontSize: '13px', lineHeight: '1.5' } }, record.reason || '暂无详细信息'),
+                                                        expandedRowRender: record => h('div', { className: 'box box-sm' }, record.reason || '暂无详细信息'),
                                                         rowExpandable: record => !!(record.reason)
                                                     },
                                                     columns: analysisColumns, 
@@ -783,7 +527,7 @@
                                                     scroll: { y: 200 }
                                                 }),
                                                 // 分页组件
-                                                analysisData.pagination?.total_count > 0 && h('div', { style: { textAlign: 'center', marginTop: '16px', paddingTop: '8px', borderTop: '1px solid #f0f0f0' } },
+                                                analysisData.pagination?.total_count > 0 && h('div', { className: 'text-center mt border-t' },
                                                     h(Pagination, {
                                                         current: analysisData.pagination.page,
                                                         pageSize: analysisData.pagination.page_size,
